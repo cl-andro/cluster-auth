@@ -26,10 +26,23 @@ android {
 
     signingConfigs {
         debug {
-            storeFile file('cluster_family.jks')
-            keyAlias 'cluster_alias'
-            storePassword 'clusterfamilypass'
-            keyPassword 'clusterfamilypass'
+            def keystoreFile = file('cluster_family.jks')
+            def passwordValue = 'clusterfamilypass'
+            def aliasValue = 'cluster_alias'
+            
+            def propFile = file('signing.properties')
+            if (propFile.exists()) {
+                def props = new Properties()
+                props.load(new FileInputStream(propFile))
+                keystoreFile = file(props['storeFile'] ?: 'cluster_family.jks')
+                passwordValue = props['storePassword'] ?: passwordValue
+                aliasValue = props['keyAlias'] ?: aliasValue
+            }
+            
+            storeFile keystoreFile
+            keyAlias aliasValue
+            storePassword passwordValue
+            keyPassword passwordValue
         }
     }
 

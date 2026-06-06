@@ -24,6 +24,15 @@ android {
 
     namespace packageName
 
+    signingConfigs {
+        debug {
+            storeFile file('cluster_family.jks')
+            keyAlias 'cluster_alias'
+            storePassword 'clusterfamilypass'
+            keyPassword 'clusterfamilypass'
+        }
+    }
+
     defaultConfig {
         applicationId "${packageName}"
         minSdkVersion 23
@@ -69,6 +78,7 @@ android {
 
     buildTypes {
         debug {
+            signingConfig signingConfigs.debug
             applicationIdSuffix ".debug"
             manifestPlaceholders = [
                 title: "cluster-AuthDev",

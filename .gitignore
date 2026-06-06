@@ -41,3 +41,4 @@ captures/
 *.jks
 crowdin.properties
 .crowdin/config.yml
+signing.properties

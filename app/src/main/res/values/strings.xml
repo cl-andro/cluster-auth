@@ -623,4 +623,37 @@
         <item quantity="one">%d item selected</item>
         <item quantity="other">%d items selected</item>
     </plurals>
+
+    <string name="tab_2fa">Cluster-AuthDev</string>
+    <string name="tab_password_vault">Passwords</string>
+
+    <string name="pw_vault_title_hint">Title</string>
+    <string name="pw_vault_username_hint">Username</string>
+    <string name="pw_vault_password_hint">Password</string>
+    <string name="pw_vault_url_hint">Website URL</string>
+    <string name="pw_vault_custom_fields_title">Custom Fields</string>
+    <string name="pw_vault_add_custom_field">Add custom field</string>
+    <string name="pw_vault_add_entry">Add password</string>
+    <string name="pw_vault_edit_entry">Edit password</string>
+    <string name="pw_vault_delete_entry">Delete password entry</string>
+    <string name="pw_vault_delete_confirm">Are you sure you want to delete this password entry?</string>
+    <string name="pw_vault_field_label_hint">Field label</string>
+    <string name="pw_vault_field_value_hint">Value</string>
+    <string name="pw_vault_select_field_type">Select field type</string>
+    <string name="pw_vault_more_fields">+%d more</string>
+    <string name="pw_vault_empty_title">No passwords saved</string>
+    <string name="pw_vault_empty_description">Tap the + button to save a password entry</string>
+    <string name="pw_vault_copy_username">Copy username</string>
+    <string name="pw_vault_copy_password">Copy password</string>
+    <string name="pw_vault_copied_username">Username copied</string>
+    <string name="pw_vault_copied_password">Password copied</string>
+
+    <string name="custom_field_email">Email</string>
+    <string name="custom_field_github">GitHub Username</string>
+    <string name="custom_field_google_mail">Google Mail</string>
+    <string name="custom_field_microsoft_mail">Microsoft Mail</string>
+    <string name="custom_field_gitlab">GitLab Username</string>
+    <string name="custom_field_x">X Username</string>
+    <string name="custom_field_facebook">Facebook</string>
+    <string name="custom_field_instagram">Instagram</string>
 </resources>

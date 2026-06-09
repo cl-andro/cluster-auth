@@ -12,9 +12,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 public class Vault {
-    private static final int VERSION = 3;
+    private static final int VERSION = 4;
     private final UUIDMap<VaultEntry> _entries = new UUIDMap<>();
     private final UUIDMap<VaultGroup> _groups = new UUIDMap<>();
+    private final UUIDMap<PasswordEntry> _passwordEntries = new UUIDMap<>();
     private boolean _iconsOptimized = true;
 
     // Whether we've migrated the group list to the new format while parsing the vault
@@ -39,10 +40,16 @@ public class Vault {
                 groupsArray.put(group.toJson());
             }
 
+            JSONArray passwordEntriesArray = new JSONArray();
+            for (PasswordEntry pe : _passwordEntries) {
+                passwordEntriesArray.put(pe.toJson());
+            }
+
             JSONObject obj = new JSONObject();
             obj.put("version", VERSION);
             obj.put("entries", entriesArray);
             obj.put("groups", groupsArray);
+            obj.put("passwordEntries", passwordEntriesArray);
             obj.put("icons_optimized", _iconsOptimized);
 
             return obj;
@@ -87,6 +94,14 @@ public class Vault {
                 }
 
                 entries.add(entry);
+            }
+
+            if (obj.has("passwordEntries")) {
+                JSONArray pwArray = obj.getJSONArray("passwordEntries");
+                for (int i = 0; i < pwArray.length(); i++) {
+                    PasswordEntry pe = PasswordEntry.fromJson(pwArray.getJSONObject(i));
+                    vault.getPasswordEntries().add(pe);
+                }
             }
 
             if (!obj.optBoolean("icons_optimized")) {
@@ -143,6 +158,10 @@ public class Vault {
 
     public UUIDMap<VaultGroup> getGroups() {
         return _groups;
+    }
+
+    public UUIDMap<PasswordEntry> getPasswordEntries() {
+        return _passwordEntries;
     }
 
     public interface EntryFilter {

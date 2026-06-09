@@ -9,6 +9,7 @@ import androidx.core.util.AtomicFile;
 import com.zk.cluster.auth.otp.GoogleAuthInfo;
 import com.zk.cluster.auth.util.Cloner;
 import com.zk.cluster.auth.util.IOUtils;
+import com.zk.cluster.auth.util.UUIDMap;
 import com.google.zxing.WriterException;
 
 import org.json.JSONObject;
@@ -316,6 +317,10 @@ public class VaultRepository {
 
     public Collection<VaultGroup> getGroups() {
         return _vault.getGroups().getValues();
+    }
+
+    public UUIDMap<PasswordEntry> getPasswordEntries() {
+        return _vault.getPasswordEntries();
     }
 
     public Collection<VaultGroup> getUsedGroups() {

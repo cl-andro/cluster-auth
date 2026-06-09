@@ -29,6 +29,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
@@ -41,6 +42,7 @@ import androidx.appcompat.view.ActionMode;
 import androidx.appcompat.widget.SearchView;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.fragment.app.FragmentTransaction;
 
 import com.zk.cluster.auth.GroupPlaceholderType;
 import com.zk.cluster.auth.Preferences;
@@ -64,9 +66,12 @@ import com.zk.cluster.auth.ui.models.VaultGroupModel;
 import com.zk.cluster.auth.ui.tasks.IconOptimizationTask;
 import com.zk.cluster.auth.ui.tasks.QrDecodeTask;
 import com.zk.cluster.auth.ui.views.EntryListView;
+import com.zk.cluster.auth.ui.views.PasswordEntryAdapter;
+import com.zk.cluster.auth.ui.views.PasswordVaultFragment;
 import com.zk.cluster.auth.util.ClipboardUtils;
 import com.zk.cluster.auth.util.TimeUtils;
 import com.zk.cluster.auth.util.UUIDMap;
+import com.zk.cluster.auth.vault.PasswordEntry;
 import com.zk.cluster.auth.vault.VaultEntry;
 import com.zk.cluster.auth.vault.VaultEntryIcon;
 import com.zk.cluster.auth.vault.VaultFile;
@@ -78,11 +83,13 @@ import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.common.base.Strings;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
@@ -96,9 +103,14 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-public class MainActivity extends ClusterActivity implements EntryListView.Listener {
+public class MainActivity extends ClusterActivity implements EntryListView.Listener, PasswordVaultFragment.Listener {
     // Permission request codes
     private static final int CODE_PERM_CAMERA = 0;
+
+    private static final String[] CUSTOM_FIELD_TYPES = {
+            "Email", "GitHub Username", "Google Mail", "Microsoft Mail",
+            "GitLab Username", "X Username", "Facebook", "Instagram"
+    };
 
     private boolean _loaded;
     private boolean _isRecreated;
@@ -114,6 +126,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
     private Menu _menu;
     private SearchView _searchView;
     private EntryListView _entryListView;
+    private PasswordVaultFragment _passwordVaultFragment;
 
     private Collection<VaultGroup> _groups;
     private ChipGroup _groupChip;
@@ -130,6 +143,13 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
     private SearchViewBackPressHandler _searchViewBackPressHandler;
     private ActionModeBackPressHandler _actionModeBackPressHandler;
     private FabMenuBackPressHandler _fabMenuBackPressHandler;
+
+    private TabLayout _tabLayout;
+    private int _currentTab = 0;
+    private View _scrimOverlay;
+    private ViewGroup _menuItemsContainer;
+    private FloatingActionButton _fab;
+    private View _fabMenuLayout;
 
     private final ActivityResultLauncher<Intent> authResultLauncher =
             registerForActivityResult(new StartActivityForResult(), activityResult -> {
@@ -206,6 +226,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             _submittedSearchQuery = savedInstanceState.getString("submittedSearchQuery");
             _isDoingIntro = savedInstanceState.getBoolean("isDoingIntro");
             _isAuthenticating = savedInstanceState.getBoolean("isAuthenticating");
+            _currentTab = savedInstanceState.getInt("currentTab", 0);
         }
 
         _lockBackPressHandler = new LockBackPressHandler();
@@ -235,33 +256,101 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         _entryListView.setSearchBehaviorMask(_prefs.getSearchBehaviorMask());
         _prefGroupFilter = _prefs.getGroupFilter();
 
-         View scrimOverlayLayout = LayoutInflater.from(this).inflate(R.layout.scrim_layout, null);
-         View scrimOverlay = scrimOverlayLayout.findViewById(R.id.scrim);
-         addContentView(scrimOverlayLayout, new ViewGroup.LayoutParams(
-             ViewGroup.LayoutParams.MATCH_PARENT,
-             ViewGroup.LayoutParams.MATCH_PARENT
-         ));
+        _passwordVaultFragment = (PasswordVaultFragment) getSupportFragmentManager().findFragmentByTag("passwordVault");
+        if (_passwordVaultFragment == null) {
+            _passwordVaultFragment = new PasswordVaultFragment();
+            getSupportFragmentManager().beginTransaction()
+                    .add(R.id.fragment_container, _passwordVaultFragment, "passwordVault")
+                    .hide(_passwordVaultFragment)
+                    .commit();
+        }
+        _passwordVaultFragment.setListener(this);
 
-         View fabMenuLayout = LayoutInflater.from(this).inflate(R.layout.fab_menu, null);
-         addContentView(fabMenuLayout, new ViewGroup.LayoutParams(
-             ViewGroup.LayoutParams.MATCH_PARENT,
-             ViewGroup.LayoutParams.MATCH_PARENT
-         ));
+        _scrimOverlay = LayoutInflater.from(this).inflate(R.layout.scrim_layout, null);
+        addContentView(_scrimOverlay, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
 
-        ViewGroup menuItemsContainer = fabMenuLayout.findViewById(R.id.fab_menu_items_container);
-        FloatingActionButton fab = fabMenuLayout.findViewById(R.id.fab);
+        _fabMenuLayout = LayoutInflater.from(this).inflate(R.layout.fab_menu, null);
+        addContentView(_fabMenuLayout, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
 
-        LinkedHashMap<View, Runnable> actions = new LinkedHashMap<>();
-        actions.put(fabMenuLayout.findViewById(R.id.fab_menu_item_scan), this::startScanActivity);
-        actions.put(fabMenuLayout.findViewById(R.id.fab_menu_item_scan_image), this::startScanImageActivity);
-        actions.put(fabMenuLayout.findViewById(R.id.fab_menu_item_enter), this::startEditEntryActivity);
-
-        _fabMenuHelper = new FabMenuHelper(scrimOverlay, menuItemsContainer, fab, actions);
-        _fabMenuHelper.setOnFabMenuStateChangeListener(_fabMenuBackPressHandler::setEnabled);
+        _menuItemsContainer = _fabMenuLayout.findViewById(R.id.fab_menu_items_container);
+        _fab = _fabMenuLayout.findViewById(R.id.fab);
 
         _groupChip = findViewById(R.id.groupChipGroup);
-        _fabScrollHelper = new FabScrollHelper(fab);
+        _fabScrollHelper = new FabScrollHelper(_fab);
         _selectedEntries = new ArrayList<>();
+
+        _tabLayout = findViewById(R.id.tab_layout);
+        _tabLayout.addTab(_tabLayout.newTab().setText(R.string.tab_2fa));
+        _tabLayout.addTab(_tabLayout.newTab().setText(R.string.tab_password_vault));
+        _tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                switchTab(tab.getPosition());
+            }
+
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {}
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {}
+        });
+    }
+
+    private void setupFabActions(boolean is2faTab) {
+        _fabMenuHelper = null;
+        _fab.setOnClickListener(null);
+        _scrimOverlay.findViewById(R.id.scrim).setOnClickListener(null);
+        _menuItemsContainer.setVisibility(View.GONE);
+
+        if (is2faTab) {
+            LinkedHashMap<View, Runnable> actions = new LinkedHashMap<>();
+            actions.put(_fabMenuLayout.findViewById(R.id.fab_menu_item_scan), this::startScanActivity);
+            actions.put(_fabMenuLayout.findViewById(R.id.fab_menu_item_scan_image), this::startScanImageActivity);
+            actions.put(_fabMenuLayout.findViewById(R.id.fab_menu_item_enter), this::startEditEntryActivity);
+
+            _fabMenuHelper = new FabMenuHelper(
+                    _scrimOverlay.findViewById(R.id.scrim),
+                    _menuItemsContainer, _fab, actions
+            );
+            _fabMenuHelper.setOnFabMenuStateChangeListener(_fabMenuBackPressHandler::setEnabled);
+        } else {
+            _fab.setOnClickListener(v -> showAddPasswordEntryDialog());
+        }
+    }
+
+    private void switchTab(int position) {
+        _currentTab = position;
+        FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
+
+        if (position == 0) {
+            ft.show(_entryListView).hide(_passwordVaultFragment);
+            findViewById(R.id.group_scroll).setVisibility(
+                    _groups != null && !_groups.isEmpty() ? View.VISIBLE : View.GONE
+            );
+            if (_searchView != null) {
+                _searchView.setVisibility(View.VISIBLE);
+            }
+            setupFabActions(true);
+        } else {
+            ft.hide(_entryListView).show(_passwordVaultFragment);
+            findViewById(R.id.group_scroll).setVisibility(View.GONE);
+            if (_searchView != null) {
+                if (!_searchView.isIconified()) {
+                    collapseSearchView();
+                }
+                _searchView.setVisibility(View.GONE);
+            }
+            setupFabActions(false);
+        }
+
+        ft.commit();
+        refreshPasswordEntries();
     }
 
     public void setGroups(Collection<VaultGroup> groups) {
@@ -335,7 +424,6 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
 
             setSaveChipVisibility(true);
 
-            // Reset group filter if last checked group gets unchecked
             if (!isChecked && _groupFilter.size() == 1) {
                 Set<UUID> groupFilter = new HashSet<>();
 
@@ -396,6 +484,9 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
     @Override
     protected void onDestroy() {
         _entryListView.setListener(null);
+        if (_passwordVaultFragment != null) {
+            _passwordVaultFragment.setListener(null);
+        }
         super.onDestroy();
     }
 
@@ -421,6 +512,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         instance.putString("submittedSearchQuery", _submittedSearchQuery);
         instance.putBoolean("isDoingIntro", _isDoingIntro);
         instance.putBoolean("isAuthenticating", _isAuthenticating);
+        instance.putInt("currentTab", _currentTab);
 
         if (_groupFilter != null) {
             instance.putSerializable("prefGroupFilter", new HashSet<>(_groupFilter));
@@ -466,7 +558,6 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
     }
 
     private void onPreferencesResult() {
-        // refresh the entire entry list if needed
         if (_loaded) {
             recreate();
         }
@@ -842,10 +933,8 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             return;
         }
 
-        switch (action) {
-            case "scan":
-                startScanActivity();
-                break;
+        if ("scan".equals(action)) {
+            startScanActivity();
         }
 
         intent.removeExtra("action");
@@ -948,7 +1037,6 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             return;
         }
 
-        // If the vault is not loaded yet, try to load it now in case it's plain text
         if (!_vaultManager.isVaultLoaded()) {
             VaultFile vaultFile;
             try {
@@ -977,18 +1065,17 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         if (!_vaultManager.isVaultLoaded()) {
             startAuthActivity(false);
         } else if (_loaded) {
-            // update the list of groups in the entry list view so that the chip gets updated
             setGroups(_vaultManager.getVault().getUsedGroups());
 
-            // update the usage counts in case they are edited outside of the EntryListView
             _entryListView.setUsageCounts(_prefs.getUsageCounts());
 
             _entryListView.setLastUsedTimestamps(_prefs.getLastUsedTimestamps());
 
-            // refresh all codes to prevent showing old ones
             _entryListView.refresh(false);
 
             _entryListView.onRefreshStart();
+
+            refreshPasswordEntries();
         } else {
             loadEntries();
             checkTimeSyncSetting();
@@ -1141,6 +1228,13 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
                 _entryListView.runEntriesAnimation();
             }
             _loaded = true;
+            refreshPasswordEntries();
+        }
+    }
+
+    private void refreshPasswordEntries() {
+        if (_vaultManager.isVaultLoaded()) {
+            _passwordVaultFragment.setEntries(_vaultManager.getVault().getPasswordEntries().getValues());
         }
     }
 
@@ -1154,7 +1248,6 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
     }
 
     private void updateLockIcon() {
-        // hide the lock icon if the vault is not unlocked
         if (_menu != null && _vaultManager.isVaultLoaded()) {
             MenuItem item = _menu.findItem(R.id.action_lock);
             item.setVisible(_vaultManager.getVault().isEncryptionEnabled());
@@ -1358,6 +1451,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         }
 
         _entryListView.clearEntries();
+        _passwordVaultFragment.clearEntries();
         _loaded = false;
 
         if (userInitiated) {
@@ -1394,6 +1488,195 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         if (_prefs.isMinimizeOnCopyEnabled()) {
             moveTaskToBack(true);
         }
+    }
+
+    // ========== Password Vault Methods ==========
+
+    @Override
+    public void onPasswordEntryClick(PasswordEntry entry) {
+        showPasswordEntryOptions(entry);
+    }
+
+    @Override
+    public void onPasswordEntryLongClick(PasswordEntry entry) {
+        showPasswordEntryOptions(entry);
+    }
+
+    private void showPasswordEntryOptions(PasswordEntry entry) {
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle(entry.getTitle())
+                .setItems(new CharSequence[]{
+                        getString(R.string.pw_vault_copy_username),
+                        getString(R.string.pw_vault_copy_password),
+                        getString(R.string.edit),
+                        getString(R.string.action_delete)
+                }, (d, which) -> {
+                    switch (which) {
+                        case 0:
+                            copyToClipboard(entry.getUsername());
+                            Toast.makeText(this, R.string.pw_vault_copied_username, Toast.LENGTH_SHORT).show();
+                            break;
+                        case 1:
+                            copyToClipboard(entry.getPassword());
+                            Toast.makeText(this, R.string.pw_vault_copied_password, Toast.LENGTH_SHORT).show();
+                            break;
+                        case 2:
+                            showPasswordEntryDialog(entry);
+                            break;
+                        case 3:
+                            deletePasswordEntry(entry);
+                            break;
+                    }
+                })
+                .create();
+        Dialogs.showSecureDialog(dialog);
+    }
+
+    @SuppressLint("InlinedApi")
+    private void copyToClipboard(String text) {
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        ClipData clip = ClipData.newPlainText("text/plain", text);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            PersistableBundle extras = new PersistableBundle();
+            extras.putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true);
+            clip.getDescription().setExtras(extras);
+        }
+        clipboard.setPrimaryClip(clip);
+    }
+
+    private void showAddPasswordEntryDialog() {
+        showPasswordEntryDialog(null);
+    }
+
+    private void showPasswordEntryDialog(@Nullable PasswordEntry existing) {
+        View view = LayoutInflater.from(this).inflate(R.layout.dialog_password_entry, null);
+        TextInputLayout layoutTitle = view.findViewById(R.id.layout_title);
+        TextInputEditText inputTitle = view.findViewById(R.id.input_title);
+        TextInputEditText inputUsername = view.findViewById(R.id.input_username);
+        TextInputEditText inputPassword = view.findViewById(R.id.input_password);
+        TextInputEditText inputUrl = view.findViewById(R.id.input_url);
+        LinearLayout layoutCustomFields = view.findViewById(R.id.layout_custom_fields);
+        Button btnAddField = view.findViewById(R.id.btn_add_custom_field);
+
+        List<PasswordEntry.CustomField> customFields = new ArrayList<>();
+
+        if (existing != null) {
+            inputTitle.setText(existing.getTitle());
+            inputUsername.setText(existing.getUsername());
+            inputPassword.setText(existing.getPassword());
+            inputUrl.setText(existing.getUrl());
+            for (PasswordEntry.CustomField cf : existing.getCustomFields()) {
+                customFields.add(new PasswordEntry.CustomField(cf.getLabel(), cf.getValue()));
+            }
+            renderCustomFields(layoutCustomFields, customFields);
+        }
+
+        btnAddField.setOnClickListener(v -> showCustomFieldTypePicker(layoutCustomFields, customFields));
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle(existing != null ? R.string.pw_vault_edit_entry : R.string.pw_vault_add_entry)
+                .setView(view)
+                .setPositiveButton(android.R.string.ok, null)
+                .setNegativeButton(android.R.string.cancel, null)
+                .create();
+
+        dialog.setOnShowListener(d -> {
+            Button btnOk = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            btnOk.setOnClickListener(v -> {
+                String title = inputTitle.getText().toString().trim();
+                if (title.isEmpty()) {
+                    layoutTitle.setError(getString(R.string.error_required_field));
+                    return;
+                }
+
+                if (existing != null) {
+                    existing.setTitle(title);
+                    existing.setUsername(inputUsername.getText().toString());
+                    existing.setPassword(inputPassword.getText().toString());
+                    existing.setUrl(inputUrl.getText().toString());
+                    existing.setCustomFields(new ArrayList<>(customFields));
+                    _vaultManager.getVault().getPasswordEntries().replace(existing);
+                } else {
+                    PasswordEntry newEntry = new PasswordEntry();
+                    newEntry.setTitle(title);
+                    newEntry.setUsername(inputUsername.getText().toString());
+                    newEntry.setPassword(inputPassword.getText().toString());
+                    newEntry.setUrl(inputUrl.getText().toString());
+                    newEntry.setCustomFields(new ArrayList<>(customFields));
+                    _vaultManager.getVault().getPasswordEntries().add(newEntry);
+                }
+
+                dialog.dismiss();
+                saveAndBackupVault();
+                refreshPasswordEntries();
+            });
+        });
+
+        Dialogs.showSecureDialog(dialog);
+    }
+
+    private void showCustomFieldTypePicker(LinearLayout container, List<PasswordEntry.CustomField> customFields) {
+        List<String> options = new ArrayList<>(Arrays.asList(CUSTOM_FIELD_TYPES));
+        options.add(getString(R.string.pw_vault_field_label_hint));
+
+        AlertDialog picker = new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.pw_vault_select_field_type)
+                .setItems(options.toArray(new CharSequence[0]), (d, which) -> {
+                    String label;
+                    if (which < CUSTOM_FIELD_TYPES.length) {
+                        label = CUSTOM_FIELD_TYPES[which];
+                    } else {
+                        label = "";
+                    }
+                    PasswordEntry.CustomField field = new PasswordEntry.CustomField(label, "");
+                    customFields.add(field);
+                    renderCustomFields(container, customFields);
+                })
+                .create();
+        Dialogs.showSecureDialog(picker);
+    }
+
+    private void renderCustomFields(LinearLayout container, List<PasswordEntry.CustomField> customFields) {
+        container.removeAllViews();
+        for (int i = 0; i < customFields.size(); i++) {
+            PasswordEntry.CustomField cf = customFields.get(i);
+            View fieldView = getLayoutInflater().inflate(R.layout.item_custom_field, container, false);
+
+            TextInputLayout layoutLabel = fieldView.findViewById(R.id.layout_field_label);
+            TextInputEditText inputLabel = fieldView.findViewById(R.id.input_field_label);
+            TextInputLayout layoutValue = fieldView.findViewById(R.id.layout_field_value);
+            TextInputEditText inputValue = fieldView.findViewById(R.id.input_field_value);
+            View btnRemove = fieldView.findViewById(R.id.btn_remove_field);
+
+            inputLabel.setText(cf.getLabel());
+            inputValue.setText(cf.getValue());
+
+            int index = i;
+            inputLabel.addTextChangedListener(new com.zk.cluster.auth.helpers.SimpleTextWatcher(
+                    text -> customFields.get(index).setLabel(text.toString())));
+            inputValue.addTextChangedListener(new com.zk.cluster.auth.helpers.SimpleTextWatcher(
+                    text -> customFields.get(index).setValue(text.toString())));
+
+            btnRemove.setOnClickListener(v -> {
+                customFields.remove(index);
+                renderCustomFields(container, customFields);
+            });
+
+            container.addView(fieldView);
+        }
+    }
+
+    private void deletePasswordEntry(PasswordEntry entry) {
+        Dialogs.showSecureDialog(new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.pw_vault_delete_entry)
+                .setMessage(R.string.pw_vault_delete_confirm)
+                .setPositiveButton(android.R.string.yes, (d, w) -> {
+                    _vaultManager.getVault().getPasswordEntries().remove(entry);
+                    saveAndBackupVault();
+                    refreshPasswordEntries();
+                })
+                .setNegativeButton(android.R.string.no, null)
+                .create());
     }
 
     private class SearchViewBackPressHandler extends OnBackPressedCallback {

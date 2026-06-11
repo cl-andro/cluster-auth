@@ -146,6 +146,12 @@ android {
     buildFeatures {
         buildConfig true
     }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            outputFileName = "cluster-auth.apk"
+        }
+    }
 }
 
 protobuf {

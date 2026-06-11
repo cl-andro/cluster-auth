@@ -68,10 +68,12 @@ import com.zk.cluster.auth.ui.tasks.QrDecodeTask;
 import com.zk.cluster.auth.ui.views.EntryListView;
 import com.zk.cluster.auth.ui.views.PasswordEntryAdapter;
 import com.zk.cluster.auth.ui.views.PasswordVaultFragment;
+import com.zk.cluster.auth.ui.views.SecretsFragment;
 import com.zk.cluster.auth.util.ClipboardUtils;
 import com.zk.cluster.auth.util.TimeUtils;
 import com.zk.cluster.auth.util.UUIDMap;
 import com.zk.cluster.auth.vault.PasswordEntry;
+import com.zk.cluster.auth.vault.SecretEntry;
 import com.zk.cluster.auth.vault.VaultEntry;
 import com.zk.cluster.auth.vault.VaultEntryIcon;
 import com.zk.cluster.auth.vault.VaultFile;
@@ -103,13 +105,18 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-public class MainActivity extends ClusterActivity implements EntryListView.Listener, PasswordVaultFragment.Listener {
+public class MainActivity extends ClusterActivity implements EntryListView.Listener, PasswordVaultFragment.Listener, SecretsFragment.Listener {
     // Permission request codes
     private static final int CODE_PERM_CAMERA = 0;
 
     private static final String[] CUSTOM_FIELD_TYPES = {
             "Email", "GitHub Username", "Google Mail", "Microsoft Mail",
             "GitLab Username", "X Username", "Facebook", "Instagram"
+    };
+
+    private static final String[] CUSTOM_FIELD_SECRET_TYPES = {
+            "GitHub PAT", "GitLab PAT", "API Key", "SSH Key",
+            "Access Key ID", "Secret Access Key", "Token"
     };
 
     private boolean _loaded;
@@ -127,6 +134,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
     private SearchView _searchView;
     private EntryListView _entryListView;
     private PasswordVaultFragment _passwordVaultFragment;
+    private SecretsFragment _secretsFragment;
 
     private Collection<VaultGroup> _groups;
     private ChipGroup _groupChip;
@@ -266,6 +274,16 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         }
         _passwordVaultFragment.setListener(this);
 
+        _secretsFragment = (SecretsFragment) getSupportFragmentManager().findFragmentByTag("secrets");
+        if (_secretsFragment == null) {
+            _secretsFragment = new SecretsFragment();
+            getSupportFragmentManager().beginTransaction()
+                    .add(R.id.fragment_container, _secretsFragment, "secrets")
+                    .hide(_secretsFragment)
+                    .commit();
+        }
+        _secretsFragment.setListener(this);
+
         _scrimOverlay = LayoutInflater.from(this).inflate(R.layout.scrim_layout, null);
         addContentView(_scrimOverlay, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -288,6 +306,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         _tabLayout = findViewById(R.id.tab_layout);
         _tabLayout.addTab(_tabLayout.newTab().setText(R.string.tab_2fa));
         _tabLayout.addTab(_tabLayout.newTab().setText(R.string.tab_password_vault));
+        _tabLayout.addTab(_tabLayout.newTab().setText(R.string.tab_secrets));
         _tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabSelected(TabLayout.Tab tab) {
@@ -302,13 +321,54 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         });
     }
 
-    private void setupFabActions(boolean is2faTab) {
+    private void switchTab(int position) {
+        _currentTab = position;
+        FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
+
+        if (position == 0) {
+            ft.show(_entryListView).hide(_passwordVaultFragment).hide(_secretsFragment);
+            findViewById(R.id.group_scroll).setVisibility(
+                    _groups != null && !_groups.isEmpty() ? View.VISIBLE : View.GONE
+            );
+            if (_searchView != null) {
+                _searchView.setVisibility(View.VISIBLE);
+            }
+        } else if (position == 1) {
+            ft.hide(_entryListView).show(_passwordVaultFragment).hide(_secretsFragment);
+            findViewById(R.id.group_scroll).setVisibility(View.GONE);
+            if (_searchView != null) {
+                if (!_searchView.isIconified()) {
+                    collapseSearchView();
+                }
+                _searchView.setVisibility(View.GONE);
+            }
+        } else {
+            ft.hide(_entryListView).hide(_passwordVaultFragment).show(_secretsFragment);
+            findViewById(R.id.group_scroll).setVisibility(View.GONE);
+            if (_searchView != null) {
+                if (!_searchView.isIconified()) {
+                    collapseSearchView();
+                }
+                _searchView.setVisibility(View.GONE);
+            }
+        }
+
+        setupFabActions();
+        ft.commit();
+        if (position == 1) {
+            refreshPasswordEntries();
+        } else if (position == 2) {
+            refreshSecretEntries();
+        }
+    }
+
+    private void setupFabActions() {
         _fabMenuHelper = null;
         _fab.setOnClickListener(null);
         _scrimOverlay.findViewById(R.id.scrim).setOnClickListener(null);
         _menuItemsContainer.setVisibility(View.GONE);
 
-        if (is2faTab) {
+        if (_currentTab == 0) {
             LinkedHashMap<View, Runnable> actions = new LinkedHashMap<>();
             actions.put(_fabMenuLayout.findViewById(R.id.fab_menu_item_scan), this::startScanActivity);
             actions.put(_fabMenuLayout.findViewById(R.id.fab_menu_item_scan_image), this::startScanImageActivity);
@@ -319,38 +379,11 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
                     _menuItemsContainer, _fab, actions
             );
             _fabMenuHelper.setOnFabMenuStateChangeListener(_fabMenuBackPressHandler::setEnabled);
-        } else {
+        } else if (_currentTab == 1) {
             _fab.setOnClickListener(v -> showAddPasswordEntryDialog());
-        }
-    }
-
-    private void switchTab(int position) {
-        _currentTab = position;
-        FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
-
-        if (position == 0) {
-            ft.show(_entryListView).hide(_passwordVaultFragment);
-            findViewById(R.id.group_scroll).setVisibility(
-                    _groups != null && !_groups.isEmpty() ? View.VISIBLE : View.GONE
-            );
-            if (_searchView != null) {
-                _searchView.setVisibility(View.VISIBLE);
-            }
-            setupFabActions(true);
         } else {
-            ft.hide(_entryListView).show(_passwordVaultFragment);
-            findViewById(R.id.group_scroll).setVisibility(View.GONE);
-            if (_searchView != null) {
-                if (!_searchView.isIconified()) {
-                    collapseSearchView();
-                }
-                _searchView.setVisibility(View.GONE);
-            }
-            setupFabActions(false);
+            _fab.setOnClickListener(v -> showAddSecretEntryDialog());
         }
-
-        ft.commit();
-        refreshPasswordEntries();
     }
 
     public void setGroups(Collection<VaultGroup> groups) {
@@ -1076,6 +1109,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             _entryListView.onRefreshStart();
 
             refreshPasswordEntries();
+            refreshSecretEntries();
         } else {
             loadEntries();
             checkTimeSyncSetting();
@@ -1229,12 +1263,19 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             }
             _loaded = true;
             refreshPasswordEntries();
+            refreshSecretEntries();
         }
     }
 
     private void refreshPasswordEntries() {
         if (_vaultManager.isVaultLoaded()) {
             _passwordVaultFragment.setEntries(_vaultManager.getVault().getPasswordEntries().getValues());
+        }
+    }
+
+    private void refreshSecretEntries() {
+        if (_vaultManager.isVaultLoaded()) {
+            _secretsFragment.setEntries(_vaultManager.getVault().getSecretEntries().getValues());
         }
     }
 
@@ -1674,6 +1715,187 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
                     _vaultManager.getVault().getPasswordEntries().remove(entry);
                     saveAndBackupVault();
                     refreshPasswordEntries();
+                })
+                .setNegativeButton(android.R.string.no, null)
+                .create());
+    }
+
+    // ========== Secret Vault Methods ==========
+
+    @Override
+    public void onSecretEntryClick(SecretEntry entry) {
+        showSecretEntryOptions(entry);
+    }
+
+    @Override
+    public void onSecretEntryLongClick(SecretEntry entry) {
+        showSecretEntryOptions(entry);
+    }
+
+    private void showSecretEntryOptions(SecretEntry entry) {
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle(entry.getTitle())
+                .setItems(new CharSequence[]{
+                        getString(R.string.sec_vault_copy_token),
+                        getString(R.string.sec_vault_copy_username),
+                        getString(R.string.edit),
+                        getString(R.string.action_delete)
+                }, (d, which) -> {
+                    switch (which) {
+                        case 0:
+                            copyToClipboard(entry.getToken());
+                            Toast.makeText(this, R.string.sec_vault_copied_token, Toast.LENGTH_SHORT).show();
+                            break;
+                        case 1:
+                            copyToClipboard(entry.getUsername());
+                            Toast.makeText(this, R.string.sec_vault_copied_username, Toast.LENGTH_SHORT).show();
+                            break;
+                        case 2:
+                            showSecretEntryDialog(entry);
+                            break;
+                        case 3:
+                            deleteSecretEntry(entry);
+                            break;
+                    }
+                })
+                .create();
+        Dialogs.showSecureDialog(dialog);
+    }
+
+    private void showAddSecretEntryDialog() {
+        showSecretEntryDialog(null);
+    }
+
+    private void showSecretEntryDialog(@Nullable SecretEntry existing) {
+        View view = LayoutInflater.from(this).inflate(R.layout.dialog_secret_entry, null);
+        TextInputLayout layoutTitle = view.findViewById(R.id.layout_title);
+        TextInputEditText inputTitle = view.findViewById(R.id.input_title);
+        TextInputEditText inputToken = view.findViewById(R.id.input_token);
+        TextInputEditText inputUsername = view.findViewById(R.id.input_username);
+        TextInputEditText inputUrl = view.findViewById(R.id.input_url);
+        TextInputEditText inputNotes = view.findViewById(R.id.input_notes);
+        LinearLayout layoutCustomFields = view.findViewById(R.id.layout_custom_fields);
+        Button btnAddField = view.findViewById(R.id.btn_add_custom_field);
+
+        List<SecretEntry.CustomField> customFields = new ArrayList<>();
+
+        if (existing != null) {
+            inputTitle.setText(existing.getTitle());
+            inputToken.setText(existing.getToken());
+            inputUsername.setText(existing.getUsername());
+            inputUrl.setText(existing.getUrl());
+            inputNotes.setText(existing.getNotes());
+            for (SecretEntry.CustomField cf : existing.getCustomFields()) {
+                customFields.add(new SecretEntry.CustomField(cf.getLabel(), cf.getValue()));
+            }
+            renderSecretCustomFields(layoutCustomFields, customFields);
+        }
+
+        btnAddField.setOnClickListener(v -> showSecretCustomFieldTypePicker(layoutCustomFields, customFields));
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle(existing != null ? R.string.sec_vault_edit_entry : R.string.sec_vault_add_entry)
+                .setView(view)
+                .setPositiveButton(android.R.string.ok, null)
+                .setNegativeButton(android.R.string.cancel, null)
+                .create();
+
+        dialog.setOnShowListener(d -> {
+            Button btnOk = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            btnOk.setOnClickListener(v -> {
+                String title = inputTitle.getText().toString().trim();
+                if (title.isEmpty()) {
+                    layoutTitle.setError(getString(R.string.error_required_field));
+                    return;
+                }
+
+                if (existing != null) {
+                    existing.setTitle(title);
+                    existing.setToken(inputToken.getText().toString());
+                    existing.setUsername(inputUsername.getText().toString());
+                    existing.setUrl(inputUrl.getText().toString());
+                    existing.setNotes(inputNotes.getText().toString());
+                    existing.setCustomFields(new ArrayList<>(customFields));
+                    _vaultManager.getVault().getSecretEntries().replace(existing);
+                } else {
+                    SecretEntry newEntry = new SecretEntry();
+                    newEntry.setTitle(title);
+                    newEntry.setToken(inputToken.getText().toString());
+                    newEntry.setUsername(inputUsername.getText().toString());
+                    newEntry.setUrl(inputUrl.getText().toString());
+                    newEntry.setNotes(inputNotes.getText().toString());
+                    newEntry.setCustomFields(new ArrayList<>(customFields));
+                    _vaultManager.getVault().getSecretEntries().add(newEntry);
+                }
+
+                dialog.dismiss();
+                saveAndBackupVault();
+                refreshSecretEntries();
+            });
+        });
+
+        Dialogs.showSecureDialog(dialog);
+    }
+
+    private void showSecretCustomFieldTypePicker(LinearLayout container, List<SecretEntry.CustomField> customFields) {
+        List<String> options = new ArrayList<>(Arrays.asList(CUSTOM_FIELD_SECRET_TYPES));
+        options.add(getString(R.string.pw_vault_field_label_hint));
+
+        AlertDialog picker = new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.pw_vault_select_field_type)
+                .setItems(options.toArray(new CharSequence[0]), (d, which) -> {
+                    String label;
+                    if (which < CUSTOM_FIELD_SECRET_TYPES.length) {
+                        label = CUSTOM_FIELD_SECRET_TYPES[which];
+                    } else {
+                        label = "";
+                    }
+                    SecretEntry.CustomField field = new SecretEntry.CustomField(label, "");
+                    customFields.add(field);
+                    renderSecretCustomFields(container, customFields);
+                })
+                .create();
+        Dialogs.showSecureDialog(picker);
+    }
+
+    private void renderSecretCustomFields(LinearLayout container, List<SecretEntry.CustomField> customFields) {
+        container.removeAllViews();
+        for (int i = 0; i < customFields.size(); i++) {
+            SecretEntry.CustomField cf = customFields.get(i);
+            View fieldView = getLayoutInflater().inflate(R.layout.item_custom_field, container, false);
+
+            TextInputLayout layoutLabel = fieldView.findViewById(R.id.layout_field_label);
+            TextInputEditText inputLabel = fieldView.findViewById(R.id.input_field_label);
+            TextInputLayout layoutValue = fieldView.findViewById(R.id.layout_field_value);
+            TextInputEditText inputValue = fieldView.findViewById(R.id.input_field_value);
+            View btnRemove = fieldView.findViewById(R.id.btn_remove_field);
+
+            inputLabel.setText(cf.getLabel());
+            inputValue.setText(cf.getValue());
+
+            int index = i;
+            inputLabel.addTextChangedListener(new com.zk.cluster.auth.helpers.SimpleTextWatcher(
+                    text -> customFields.get(index).setLabel(text.toString())));
+            inputValue.addTextChangedListener(new com.zk.cluster.auth.helpers.SimpleTextWatcher(
+                    text -> customFields.get(index).setValue(text.toString())));
+
+            btnRemove.setOnClickListener(v -> {
+                customFields.remove(index);
+                renderSecretCustomFields(container, customFields);
+            });
+
+            container.addView(fieldView);
+        }
+    }
+
+    private void deleteSecretEntry(SecretEntry entry) {
+        Dialogs.showSecureDialog(new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.sec_vault_delete_entry)
+                .setMessage(R.string.sec_vault_delete_confirm)
+                .setPositiveButton(android.R.string.yes, (d, w) -> {
+                    _vaultManager.getVault().getSecretEntries().remove(entry);
+                    saveAndBackupVault();
+                    refreshSecretEntries();
                 })
                 .setNegativeButton(android.R.string.no, null)
                 .create());

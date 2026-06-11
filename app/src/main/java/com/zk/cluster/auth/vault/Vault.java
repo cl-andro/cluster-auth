@@ -16,6 +16,7 @@ public class Vault {
     private final UUIDMap<VaultEntry> _entries = new UUIDMap<>();
     private final UUIDMap<VaultGroup> _groups = new UUIDMap<>();
     private final UUIDMap<PasswordEntry> _passwordEntries = new UUIDMap<>();
+    private final UUIDMap<SecretEntry> _secretEntries = new UUIDMap<>();
     private boolean _iconsOptimized = true;
 
     // Whether we've migrated the group list to the new format while parsing the vault
@@ -45,11 +46,17 @@ public class Vault {
                 passwordEntriesArray.put(pe.toJson());
             }
 
+            JSONArray secretEntriesArray = new JSONArray();
+            for (SecretEntry se : _secretEntries) {
+                secretEntriesArray.put(se.toJson());
+            }
+
             JSONObject obj = new JSONObject();
             obj.put("version", VERSION);
             obj.put("entries", entriesArray);
             obj.put("groups", groupsArray);
             obj.put("passwordEntries", passwordEntriesArray);
+            obj.put("secretEntries", secretEntriesArray);
             obj.put("icons_optimized", _iconsOptimized);
 
             return obj;
@@ -101,6 +108,14 @@ public class Vault {
                 for (int i = 0; i < pwArray.length(); i++) {
                     PasswordEntry pe = PasswordEntry.fromJson(pwArray.getJSONObject(i));
                     vault.getPasswordEntries().add(pe);
+                }
+            }
+
+            if (obj.has("secretEntries")) {
+                JSONArray secArray = obj.getJSONArray("secretEntries");
+                for (int i = 0; i < secArray.length(); i++) {
+                    SecretEntry se = SecretEntry.fromJson(secArray.getJSONObject(i));
+                    vault.getSecretEntries().add(se);
                 }
             }
 
@@ -162,6 +177,10 @@ public class Vault {
 
     public UUIDMap<PasswordEntry> getPasswordEntries() {
         return _passwordEntries;
+    }
+
+    public UUIDMap<SecretEntry> getSecretEntries() {
+        return _secretEntries;
     }
 
     public interface EntryFilter {

@@ -69,11 +69,13 @@ import com.zk.cluster.auth.ui.views.EntryListView;
 import com.zk.cluster.auth.ui.views.PasswordEntryAdapter;
 import com.zk.cluster.auth.ui.views.PasswordVaultFragment;
 import com.zk.cluster.auth.ui.views.SecretsFragment;
+import com.zk.cluster.auth.ui.views.PhoneNumbersFragment;
 import com.zk.cluster.auth.util.ClipboardUtils;
 import com.zk.cluster.auth.util.TimeUtils;
 import com.zk.cluster.auth.util.UUIDMap;
 import com.zk.cluster.auth.vault.PasswordEntry;
 import com.zk.cluster.auth.vault.SecretEntry;
+import com.zk.cluster.auth.vault.PhoneEntry;
 import com.zk.cluster.auth.vault.VaultEntry;
 import com.zk.cluster.auth.vault.VaultEntryIcon;
 import com.zk.cluster.auth.vault.VaultFile;
@@ -105,7 +107,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-public class MainActivity extends ClusterActivity implements EntryListView.Listener, PasswordVaultFragment.Listener, SecretsFragment.Listener {
+public class MainActivity extends ClusterActivity implements EntryListView.Listener, PasswordVaultFragment.Listener, SecretsFragment.Listener, PhoneNumbersFragment.Listener {
     // Permission request codes
     private static final int CODE_PERM_CAMERA = 0;
 
@@ -117,7 +119,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
     private static final String[] CUSTOM_FIELD_SECRET_TYPES = {
             "GitHub PAT", "GitLab PAT", "API Key", "SSH Key",
             "Access Key ID", "Secret Access Key", "Token"
-    };
+        };
 
     private boolean _loaded;
     private boolean _isRecreated;
@@ -135,6 +137,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
     private EntryListView _entryListView;
     private PasswordVaultFragment _passwordVaultFragment;
     private SecretsFragment _secretsFragment;
+    private PhoneNumbersFragment _phoneNumbersFragment;
 
     private Collection<VaultGroup> _groups;
     private ChipGroup _groupChip;
@@ -284,6 +287,16 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         }
         _secretsFragment.setListener(this);
 
+        _phoneNumbersFragment = (PhoneNumbersFragment) getSupportFragmentManager().findFragmentByTag("phoneNumbers");
+        if (_phoneNumbersFragment == null) {
+            _phoneNumbersFragment = new PhoneNumbersFragment();
+            getSupportFragmentManager().beginTransaction()
+                    .add(R.id.fragment_container, _phoneNumbersFragment, "phoneNumbers")
+                    .hide(_phoneNumbersFragment)
+                    .commit();
+        }
+        _phoneNumbersFragment.setListener(this);
+
         _scrimOverlay = LayoutInflater.from(this).inflate(R.layout.scrim_layout, null);
         addContentView(_scrimOverlay, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -307,6 +320,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         _tabLayout.addTab(_tabLayout.newTab().setText(R.string.tab_2fa));
         _tabLayout.addTab(_tabLayout.newTab().setText(R.string.tab_password_vault));
         _tabLayout.addTab(_tabLayout.newTab().setText(R.string.tab_secrets));
+        _tabLayout.addTab(_tabLayout.newTab().setText(R.string.tab_phone_no));
         _tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabSelected(TabLayout.Tab tab) {
@@ -326,7 +340,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
 
         if (position == 0) {
-            ft.show(_entryListView).hide(_passwordVaultFragment).hide(_secretsFragment);
+            ft.show(_entryListView).hide(_passwordVaultFragment).hide(_secretsFragment).hide(_phoneNumbersFragment);
             findViewById(R.id.group_scroll).setVisibility(
                     _groups != null && !_groups.isEmpty() ? View.VISIBLE : View.GONE
             );
@@ -334,7 +348,16 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
                 _searchView.setVisibility(View.VISIBLE);
             }
         } else if (position == 1) {
-            ft.hide(_entryListView).show(_passwordVaultFragment).hide(_secretsFragment);
+            ft.hide(_entryListView).show(_passwordVaultFragment).hide(_secretsFragment).hide(_phoneNumbersFragment);
+            findViewById(R.id.group_scroll).setVisibility(View.GONE);
+            if (_searchView != null) {
+                if (!_searchView.isIconified()) {
+                    collapseSearchView();
+                }
+                _searchView.setVisibility(View.GONE);
+            }
+        } else if (position == 2) {
+            ft.hide(_entryListView).hide(_passwordVaultFragment).show(_secretsFragment).hide(_phoneNumbersFragment);
             findViewById(R.id.group_scroll).setVisibility(View.GONE);
             if (_searchView != null) {
                 if (!_searchView.isIconified()) {
@@ -343,7 +366,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
                 _searchView.setVisibility(View.GONE);
             }
         } else {
-            ft.hide(_entryListView).hide(_passwordVaultFragment).show(_secretsFragment);
+            ft.hide(_entryListView).hide(_passwordVaultFragment).hide(_secretsFragment).show(_phoneNumbersFragment);
             findViewById(R.id.group_scroll).setVisibility(View.GONE);
             if (_searchView != null) {
                 if (!_searchView.isIconified()) {
@@ -359,6 +382,8 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             refreshPasswordEntries();
         } else if (position == 2) {
             refreshSecretEntries();
+        } else if (position == 3) {
+            refreshPhoneEntries();
         }
     }
 
@@ -381,8 +406,10 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             _fabMenuHelper.setOnFabMenuStateChangeListener(_fabMenuBackPressHandler::setEnabled);
         } else if (_currentTab == 1) {
             _fab.setOnClickListener(v -> showAddPasswordEntryDialog());
-        } else {
+        } else if (_currentTab == 2) {
             _fab.setOnClickListener(v -> showAddSecretEntryDialog());
+        } else {
+            _fab.setOnClickListener(v -> showAddPhoneEntryDialog());
         }
     }
 
@@ -1110,6 +1137,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
 
             refreshPasswordEntries();
             refreshSecretEntries();
+            refreshPhoneEntries();
         } else {
             loadEntries();
             checkTimeSyncSetting();
@@ -1264,6 +1292,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             _loaded = true;
             refreshPasswordEntries();
             refreshSecretEntries();
+            refreshPhoneEntries();
         }
     }
 
@@ -1276,6 +1305,12 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
     private void refreshSecretEntries() {
         if (_vaultManager.isVaultLoaded()) {
             _secretsFragment.setEntries(_vaultManager.getVault().getSecretEntries().getValues());
+        }
+    }
+
+    private void refreshPhoneEntries() {
+        if (_vaultManager.isVaultLoaded()) {
+            _phoneNumbersFragment.setEntries(_vaultManager.getVault().getPhoneEntries().getValues());
         }
     }
 
@@ -1493,6 +1528,8 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
 
         _entryListView.clearEntries();
         _passwordVaultFragment.clearEntries();
+        _secretsFragment.clearEntries();
+        _phoneNumbersFragment.clearEntries();
         _loaded = false;
 
         if (userInitiated) {
@@ -1896,6 +1933,111 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
                     _vaultManager.getVault().getSecretEntries().remove(entry);
                     saveAndBackupVault();
                     refreshSecretEntries();
+                })
+                .setNegativeButton(android.R.string.no, null)
+                .create());
+    }
+
+    // ========== Phone Vault Methods ==========
+
+    @Override
+    public void onPhoneEntryClick(PhoneEntry entry) {
+        showPhoneEntryOptions(entry);
+    }
+
+    @Override
+    public void onPhoneEntryLongClick(PhoneEntry entry) {
+        showPhoneEntryOptions(entry);
+    }
+
+    private void showPhoneEntryOptions(PhoneEntry entry) {
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle(entry.getTitle())
+                .setItems(new CharSequence[]{
+                        getString(R.string.phone_vault_copy_number),
+                        getString(R.string.edit),
+                        getString(R.string.action_delete)
+                }, (d, which) -> {
+                    switch (which) {
+                        case 0:
+                            copyToClipboard(entry.getPhoneNumber());
+                            Toast.makeText(this, R.string.phone_vault_copied_number, Toast.LENGTH_SHORT).show();
+                            break;
+                        case 1:
+                            showPhoneEntryDialog(entry);
+                            break;
+                        case 2:
+                            deletePhoneEntry(entry);
+                            break;
+                    }
+                })
+                .create();
+        Dialogs.showSecureDialog(dialog);
+    }
+
+    private void showAddPhoneEntryDialog() {
+        showPhoneEntryDialog(null);
+    }
+
+    private void showPhoneEntryDialog(@Nullable PhoneEntry existing) {
+        View view = LayoutInflater.from(this).inflate(R.layout.dialog_phone_entry, null);
+        TextInputLayout layoutTitle = view.findViewById(R.id.layout_title);
+        TextInputEditText inputTitle = view.findViewById(R.id.input_title);
+        TextInputEditText inputPhoneNumber = view.findViewById(R.id.input_phone_number);
+        TextInputEditText inputNotes = view.findViewById(R.id.input_notes);
+
+        if (existing != null) {
+            inputTitle.setText(existing.getTitle());
+            inputPhoneNumber.setText(existing.getPhoneNumber());
+            inputNotes.setText(existing.getNotes());
+        }
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle(existing != null ? R.string.phone_vault_edit_entry : R.string.phone_vault_add_entry)
+                .setView(view)
+                .setPositiveButton(android.R.string.ok, null)
+                .setNegativeButton(android.R.string.cancel, null)
+                .create();
+
+        dialog.setOnShowListener(d -> {
+            Button btnOk = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            btnOk.setOnClickListener(v -> {
+                String title = inputTitle.getText().toString().trim();
+                if (title.isEmpty()) {
+                    layoutTitle.setError(getString(R.string.error_required_field));
+                    return;
+                }
+
+                if (existing != null) {
+                    existing.setTitle(title);
+                    existing.setPhoneNumber(inputPhoneNumber.getText().toString().trim());
+                    existing.setNotes(inputNotes.getText().toString().trim());
+                    _vaultManager.getVault().getPhoneEntries().replace(existing);
+                } else {
+                    PhoneEntry newEntry = new PhoneEntry();
+                    newEntry.setTitle(title);
+                    newEntry.setPhoneNumber(inputPhoneNumber.getText().toString().trim());
+                    newEntry.setNotes(inputNotes.getText().toString().trim());
+                    _vaultManager.getVault().getPhoneEntries().add(newEntry);
+                }
+
+                dialog.dismiss();
+                saveAndBackupVault();
+                refreshPhoneEntries();
+            });
+        });
+
+        Dialogs.showSecureDialog(dialog);
+    }
+
+    private void deletePhoneEntry(PhoneEntry entry) {
+        Dialogs.showSecureDialog(new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.phone_vault_delete_entry)
+                .setMessage(R.string.phone_vault_delete_confirm)
+                .setPositiveButton(android.R.string.yes, (d, w) -> {
+                    _vaultManager.getVault().getPhoneEntries().remove(entry);
+                    saveAndBackupVault();
+                    refreshPhoneEntries();
                 })
                 .setNegativeButton(android.R.string.no, null)
                 .create());

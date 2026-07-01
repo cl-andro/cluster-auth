@@ -17,6 +17,7 @@ public class Vault {
     private final UUIDMap<VaultGroup> _groups = new UUIDMap<>();
     private final UUIDMap<PasswordEntry> _passwordEntries = new UUIDMap<>();
     private final UUIDMap<SecretEntry> _secretEntries = new UUIDMap<>();
+    private final UUIDMap<PhoneEntry> _phoneEntries = new UUIDMap<>();
     private boolean _iconsOptimized = true;
 
     // Whether we've migrated the group list to the new format while parsing the vault
@@ -51,12 +52,18 @@ public class Vault {
                 secretEntriesArray.put(se.toJson());
             }
 
+            JSONArray phoneEntriesArray = new JSONArray();
+            for (PhoneEntry pe : _phoneEntries) {
+                phoneEntriesArray.put(pe.toJson());
+            }
+
             JSONObject obj = new JSONObject();
             obj.put("version", VERSION);
             obj.put("entries", entriesArray);
             obj.put("groups", groupsArray);
             obj.put("passwordEntries", passwordEntriesArray);
             obj.put("secretEntries", secretEntriesArray);
+            obj.put("phoneEntries", phoneEntriesArray);
             obj.put("icons_optimized", _iconsOptimized);
 
             return obj;
@@ -116,6 +123,14 @@ public class Vault {
                 for (int i = 0; i < secArray.length(); i++) {
                     SecretEntry se = SecretEntry.fromJson(secArray.getJSONObject(i));
                     vault.getSecretEntries().add(se);
+                }
+            }
+
+            if (obj.has("phoneEntries")) {
+                JSONArray phArray = obj.getJSONArray("phoneEntries");
+                for (int i = 0; i < phArray.length(); i++) {
+                    PhoneEntry pe = PhoneEntry.fromJson(phArray.getJSONObject(i));
+                    vault.getPhoneEntries().add(pe);
                 }
             }
 
@@ -181,6 +196,10 @@ public class Vault {
 
     public UUIDMap<SecretEntry> getSecretEntries() {
         return _secretEntries;
+    }
+
+    public UUIDMap<PhoneEntry> getPhoneEntries() {
+        return _phoneEntries;
     }
 
     public interface EntryFilter {

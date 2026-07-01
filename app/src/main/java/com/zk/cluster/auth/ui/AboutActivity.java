@@ -19,20 +19,14 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.zk.cluster.auth.BuildConfig;
 import com.zk.cluster.auth.R;
-import com.zk.cluster.auth.ui.dialogs.ChangelogDialog;
-import com.zk.cluster.auth.ui.dialogs.LicenseDialog;
 import com.zk.cluster.auth.helpers.ViewHelper;
 import com.google.android.material.color.MaterialColors;
 
 public class AboutActivity extends ClusterActivity {
 
-    private static String GITHUB = "https://github.com/beemdevelopment/Cluster";
-    private static String WEBSITE_ALEXANDER = "https://alexbakker.me";
-    private static String GITHUB_MICHAEL = "https://github.com/michaelschattgen";
+    private static String GITHUB = "https://github.com/cl-andro/cluster-vault-release.git";
 
-    private static String MAIL_BEEMDEVELOPMENT = "beemdevelopment@gmail.com";
-    private static String WEBSITE_BEEMDEVELOPMENT = "https://beem.dev/";
-    private static String PLAYSTORE_BEEMDEVELOPMENT = "https://play.google.com/store/apps/details?id=com.zk.cluster.auth";
+    private static String MAIL_BEEMDEVELOPMENT = "zkalamgir@proton.me";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,19 +44,6 @@ public class AboutActivity extends ClusterActivity {
             getSupportActionBar().setDisplayShowHomeEnabled(true);
         }
 
-        View btnLicense = findViewById(R.id.btn_license);
-        btnLicense.setOnClickListener(v -> {
-            LicenseDialog.create()
-                    .setTheme(_themeHelper.getConfiguredTheme())
-                    .show(getSupportFragmentManager(), null);
-        });
-
-        View btnThirdPartyLicenses = findViewById(R.id.btn_third_party_licenses);
-        btnThirdPartyLicenses.setOnClickListener(v -> {
-            Intent intent = new Intent(this, LicensesActivity.class);
-            startActivity(intent);
-        });
-
         TextView appVersion = findViewById(R.id.app_version);
         appVersion.setText(getCurrentAppVersion());
 
@@ -74,27 +55,8 @@ public class AboutActivity extends ClusterActivity {
         View btnGithub = findViewById(R.id.btn_github);
         btnGithub.setOnClickListener(v -> openUrl(GITHUB));
 
-        View btnAlexander = findViewById(R.id.btn_alexander);
-        btnAlexander.setOnClickListener(v -> openUrl(WEBSITE_ALEXANDER));
-
-        View btnMichael = findViewById(R.id.btn_michael);
-        btnMichael.setOnClickListener(v -> openUrl(GITHUB_MICHAEL));
-
         View btnMail = findViewById(R.id.btn_email);
         btnMail.setOnClickListener(v -> openMail(MAIL_BEEMDEVELOPMENT));
-
-        View btnWebsite = findViewById(R.id.btn_website);
-        btnWebsite.setOnClickListener(v -> openUrl(WEBSITE_BEEMDEVELOPMENT));
-
-        View btnRate = findViewById(R.id.btn_rate);
-        btnRate.setOnClickListener(v -> openUrl(PLAYSTORE_BEEMDEVELOPMENT ));
-
-        View btnChangelog = findViewById(R.id.btn_changelog);
-        btnChangelog.setOnClickListener(v -> {
-            ChangelogDialog.create()
-                    .setTheme(_themeHelper.getConfiguredTheme())
-                    .show(getSupportFragmentManager(), null);
-        });
 
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.about_scroll_view), (targetView, windowInsets) -> {
             Insets insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());

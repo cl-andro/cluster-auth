@@ -327,6 +327,10 @@ public class VaultRepository {
         return _vault.getSecretEntries();
     }
 
+    public UUIDMap<PhoneEntry> getPhoneEntries() {
+        return _vault.getPhoneEntries();
+    }
+
     public Collection<VaultGroup> getUsedGroups() {
         Set<UUID> usedGroups = new HashSet<>();
         for (VaultEntry entry : getEntries()) {

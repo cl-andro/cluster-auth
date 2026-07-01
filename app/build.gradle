@@ -94,7 +94,7 @@ android {
             signingConfig signingConfigs.debug
             applicationIdSuffix ".debug"
             manifestPlaceholders = [
-                title: "cluster-AuthDev",
+                title: "Cluster-VaultDev",
                 iconName: "ic_launcher_debug",
                 fileProviderAuthority: "${fileProviderAuthorityDebug}"
             ]
@@ -103,7 +103,7 @@ android {
         }
         release {
             manifestPlaceholders = [
-                title: "cluster-Auth",
+                title: "Cluster-Vault",
                 iconName: "ic_launcher",
                 fileProviderAuthority: "${fileProviderAuthority}"
             ]
@@ -149,7 +149,7 @@ android {
 
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
-            outputFileName = "cluster-auth.apk"
+            outputFileName = "Cluster-Vault.apk"
         }
     }
 }

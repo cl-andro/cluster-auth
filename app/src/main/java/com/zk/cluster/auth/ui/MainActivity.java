@@ -333,6 +333,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             @Override
             public void onTabReselected(TabLayout.Tab tab) {}
         });
+        checkForUpdates();
     }
 
     private void switchTab(int position) {
@@ -2185,5 +2186,100 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             _selectedEntries.clear();
             _actionMode = null;
         }
+    }
+
+    private void checkForUpdates() {
+        final String currentVersion;
+        try {
+            currentVersion = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            return;
+        }
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    java.net.URL url = new java.net.URL("https://api.github.com/repos/cl-andro/cluster-vault-release/releases/latest");
+                    java.net.HttpURLConnection connection = (java.net.HttpURLConnection) url.openConnection();
+                    connection.setRequestMethod("GET");
+                    connection.setRequestProperty("Accept", "application/vnd.github.v3+json");
+                    connection.setRequestProperty("User-Agent", "Cluster-Vault-Updater");
+                    connection.setConnectTimeout(5000);
+                    connection.setReadTimeout(5000);
+
+                    if (connection.getResponseCode() == 200) {
+                        java.io.InputStream in = connection.getInputStream();
+                        java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(in));
+                        StringBuilder response = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            response.append(line);
+                        }
+                        reader.close();
+
+                        org.json.JSONObject json = new org.json.JSONObject(response.toString());
+                        final String latestTag = json.getString("tag_name");
+                        String latestVersion = latestTag.startsWith("v") ? latestTag.substring(1) : latestTag;
+                        String currentClean = currentVersion.startsWith("v") ? currentVersion.substring(1) : currentVersion;
+
+                        if (isNewerVersion(currentClean, latestVersion)) {
+                            org.json.JSONArray assets = json.getJSONArray("assets");
+                            String downloadUrl = json.getString("html_url");
+                            if (assets.length() > 0) {
+                                downloadUrl = assets.getJSONObject(0).getString("browser_download_url");
+                            }
+
+                            final String finalUrl = downloadUrl;
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    showUpdateDialog(latestTag, finalUrl);
+                                }
+                            });
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
+    }
+
+    private boolean isNewerVersion(String current, String latest) {
+        try {
+            String[] currentParts = current.split("\\.");
+            String[] latestParts = latest.split("\\.");
+            int length = Math.max(currentParts.length, latestParts.length);
+            for (int i = 0; i < length; i++) {
+                int currentVal = i < currentParts.length ? Integer.parseInt(currentParts[i].replaceAll("[^0-9]", "")) : 0;
+                int latestVal = i < latestParts.length ? Integer.parseInt(latestParts[i].replaceAll("[^0-9]", "")) : 0;
+                if (latestVal > currentVal) return true;
+                if (currentVal > latestVal) return false;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    private void showUpdateDialog(String latestVersion, final String downloadUrl) {
+        if (isFinishing() || isDestroyed()) return;
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("Update Available")
+                .setMessage("A new version (" + latestVersion + ") of Cluster Vault is available. Would you like to update?")
+                .setPositiveButton("Update", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        try {
+                            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl));
+                            startActivity(intent);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                })
+                .setNegativeButton("Later", null)
+                .show();
     }
 }

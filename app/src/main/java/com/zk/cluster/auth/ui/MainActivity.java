@@ -2271,15 +2271,117 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
                 .setPositiveButton("Update", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
-                        try {
-                            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl));
-                            startActivity(intent);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
+                        startUpdateDownload(downloadUrl);
                     }
                 })
                 .setNegativeButton("Later", null)
                 .show();
+    }
+
+    private void startUpdateDownload(final String downloadUrl) {
+        final MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
+        builder.setTitle("Downloading Update");
+        builder.setMessage("Please wait while the update is downloading...");
+        builder.setCancelable(false);
+
+        final android.widget.ProgressBar progressBar = new android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progressBar.setIndeterminate(false);
+        progressBar.setMax(100);
+
+        android.widget.FrameLayout container = new android.widget.FrameLayout(this);
+        android.widget.FrameLayout.LayoutParams params = new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        int margin = (int) (16 * getResources().getDisplayMetrics().density);
+        params.leftMargin = margin;
+        params.rightMargin = margin;
+        params.topMargin = margin;
+        params.bottomMargin = margin;
+        progressBar.setLayoutParams(params);
+        container.addView(progressBar);
+
+        builder.setView(container);
+        final androidx.appcompat.app.AlertDialog progressDialog = builder.show();
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                java.io.InputStream in = null;
+                java.io.FileOutputStream out = null;
+                try {
+                    java.net.URL url = new java.net.URL(downloadUrl);
+                    java.net.HttpURLConnection connection = (java.net.HttpURLConnection) url.openConnection();
+                    connection.connect();
+
+                    if (connection.getResponseCode() == 200) {
+                        final int fileLength = connection.getContentLength();
+                        in = connection.getInputStream();
+
+                        java.io.File exportDir = new java.io.File(getCacheDir(), "export");
+                        if (!exportDir.exists()) exportDir.mkdirs();
+                        final java.io.File apkFile = new java.io.File(exportDir, "update.apk");
+                        out = new java.io.FileOutputStream(apkFile);
+
+                        byte[] data = new byte[4096];
+                        long total = 0;
+                        int count;
+                        while ((count = in.read(data)) != -1) {
+                            total += count;
+                            if (fileLength > 0) {
+                                final int progress = (int) (total * 100 / fileLength);
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        progressBar.setProgress(progress);
+                                    }
+                                });
+                            }
+                            out.write(data, 0, count);
+                        }
+                        out.flush();
+
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                progressDialog.dismiss();
+                                installApk(apkFile);
+                            }
+                        });
+                    } else {
+                        throw new Exception("HTTP " + connection.getResponseCode());
+                    }
+                } catch (final Exception e) {
+                    e.printStackTrace();
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            progressDialog.dismiss();
+                            Toast.makeText(MainActivity.this, "Download failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                        }
+                    });
+                } finally {
+                    try {
+                        if (in != null) in.close();
+                        if (out != null) out.close();
+                    } catch (Exception ignored) {}
+                }
+            }
+        }).start();
+    }
+
+    private void installApk(java.io.File file) {
+        try {
+            String authority = com.zk.cluster.auth.BuildConfig.FILE_PROVIDER_AUTHORITY;
+            Uri apkUri = androidx.core.content.FileProvider.getUriForFile(this, authority, file);
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Failed to launch installer: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 }

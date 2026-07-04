@@ -2268,8 +2268,12 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             String[] latestParts = latest.split("\\.");
             int length = Math.max(currentParts.length, latestParts.length);
             for (int i = 0; i < length; i++) {
-                int currentVal = i < currentParts.length ? Integer.parseInt(currentParts[i].replaceAll("[^0-9]", "")) : 0;
-                int latestVal = i < latestParts.length ? Integer.parseInt(latestParts[i].replaceAll("[^0-9]", "")) : 0;
+                String currentCleaned = i < currentParts.length ? currentParts[i].replaceAll("[^0-9]", "") : "";
+                int currentVal = !currentCleaned.isEmpty() ? Integer.parseInt(currentCleaned) : 0;
+                
+                String latestCleaned = i < latestParts.length ? latestParts[i].replaceAll("[^0-9]", "") : "";
+                int latestVal = !latestCleaned.isEmpty() ? Integer.parseInt(latestCleaned) : 0;
+                
                 if (latestVal > currentVal) return true;
                 if (currentVal > latestVal) return false;
             }

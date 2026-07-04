@@ -312,6 +312,22 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         _menuItemsContainer = _fabMenuLayout.findViewById(R.id.fab_menu_items_container);
         _fab = _fabMenuLayout.findViewById(R.id.fab);
 
+        ViewCompat.setOnApplyWindowInsetsListener(_fabMenuLayout, (v, insets) -> {
+            int bottomInset = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
+            
+            ViewGroup.MarginLayoutParams fabParams = (ViewGroup.MarginLayoutParams) _fab.getLayoutParams();
+            int defaultFabMargin = v.getResources().getDimensionPixelSize(R.dimen.fab_margin);
+            fabParams.bottomMargin = defaultFabMargin + bottomInset;
+            _fab.setLayoutParams(fabParams);
+            
+            ViewGroup.MarginLayoutParams containerParams = (ViewGroup.MarginLayoutParams) _menuItemsContainer.getLayoutParams();
+            int defaultContainerMargin = (int) (75 * v.getResources().getDisplayMetrics().density);
+            containerParams.bottomMargin = defaultContainerMargin + bottomInset;
+            _menuItemsContainer.setLayoutParams(containerParams);
+            
+            return insets;
+        });
+
         _groupChip = findViewById(R.id.groupChipGroup);
         _fabScrollHelper = new FabScrollHelper(_fab);
         _selectedEntries = new ArrayList<>();

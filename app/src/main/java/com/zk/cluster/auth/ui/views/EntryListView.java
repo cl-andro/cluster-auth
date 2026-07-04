@@ -180,7 +180,7 @@ public class EntryListView extends Fragment implements EntryAdapter.Listener {
                     rvInitialPaddingRight,
                     rvInitialPaddingBottom + insets.bottom
             );
-            return WindowInsetsCompat.CONSUMED;
+            return windowInsets;
         });
 
         _emptyStateView = view.findViewById(R.id.vEmptyList);

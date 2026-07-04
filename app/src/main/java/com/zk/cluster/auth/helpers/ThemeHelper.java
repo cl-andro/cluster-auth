@@ -26,18 +26,32 @@ public class ThemeHelper {
      * given map, based on the theme configured by the user.
      */
     public void setTheme(Map<Theme, Integer> themeMap) {
-        int theme = themeMap.get(getConfiguredTheme());
+        Theme themeKey = getConfiguredTheme();
+        int theme = themeMap.get(themeKey);
         _activity.setTheme(theme);
 
         if (_prefs.isDynamicColorsEnabled()) {
             DynamicColorsOptions.Builder optsBuilder = new DynamicColorsOptions.Builder();
-            if (getConfiguredTheme().equals(Theme.AMOLED)) {
+            if (themeKey.equals(Theme.AMOLED)) {
                 optsBuilder.setThemeOverlay(R.style.ThemeOverlay_Cluster_Dynamic_Amoled);
-            } else if (getConfiguredTheme().equals(Theme.DARK)) {
+            } else if (themeKey.equals(Theme.DARK)) {
                 optsBuilder.setThemeOverlay(R.style.ThemeOverlay_Cluster_Dynamic_Dark);
             }
 
             DynamicColors.applyToActivityIfAvailable(_activity, optsBuilder.build());
+        }
+
+        applySystemBarColors(themeKey);
+    }
+
+    private void applySystemBarColors(Theme theme) {
+        android.view.Window window = _activity.getWindow();
+        boolean isLight = (theme == Theme.LIGHT);
+        androidx.core.view.WindowInsetsControllerCompat controller =
+                androidx.core.view.WindowCompat.getInsetsController(window, window.getDecorView());
+        if (controller != null) {
+            controller.setAppearanceLightStatusBars(isLight);
+            controller.setAppearanceLightNavigationBars(isLight);
         }
     }
 

@@ -8,6 +8,9 @@ import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.graphics.Insets;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -33,6 +36,22 @@ public class PhoneNumbersFragment extends Fragment implements PhoneEntryAdapter.
         _recyclerView = view.findViewById(R.id.rvPhoneEntries);
         _recyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         _recyclerView.setAdapter(_adapter);
+
+        final int rvInitialPaddingLeft = _recyclerView.getPaddingLeft();
+        final int rvInitialPaddingTop = _recyclerView.getPaddingTop();
+        final int rvInitialPaddingRight = _recyclerView.getPaddingRight();
+        final int rvInitialPaddingBottom = _recyclerView.getPaddingBottom();
+
+        ViewCompat.setOnApplyWindowInsetsListener(_recyclerView, (targetView, windowInsets) -> {
+            Insets insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            targetView.setPadding(
+                    rvInitialPaddingLeft,
+                    rvInitialPaddingTop,
+                    rvInitialPaddingRight,
+                    rvInitialPaddingBottom + insets.bottom
+            );
+            return windowInsets;
+        });
 
         _emptyStateView = view.findViewById(R.id.vEmptyList);
 

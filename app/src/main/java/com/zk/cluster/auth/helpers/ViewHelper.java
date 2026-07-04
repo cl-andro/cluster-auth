@@ -20,7 +20,7 @@ public class ViewHelper {
                     insets.right,
                     0
             );
-            return WindowInsetsCompat.CONSUMED;
+            return windowInsets;
         });
     }
 }

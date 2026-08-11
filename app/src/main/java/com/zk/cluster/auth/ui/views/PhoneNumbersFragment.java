@@ -20,6 +20,7 @@ import com.zk.cluster.auth.vault.PhoneEntry;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 public class PhoneNumbersFragment extends Fragment implements PhoneEntryAdapter.Listener {
     private PhoneEntryAdapter _adapter;
@@ -58,13 +59,50 @@ public class PhoneNumbersFragment extends Fragment implements PhoneEntryAdapter.
         return view;
     }
 
+    private List<PhoneEntry> _allEntries = new ArrayList<>();
+    private String _searchFilter = null;
+
     public void setEntries(Collection<PhoneEntry> entries) {
-        _adapter.setEntries(new ArrayList<>(entries));
-        updateEmptyState();
+        _allEntries = new ArrayList<>(entries);
+        applyFilter();
     }
 
     public void clearEntries() {
-        _adapter.setEntries(new ArrayList<>());
+        _allEntries = new ArrayList<>();
+        applyFilter();
+    }
+
+    public void setSearchFilter(String search) {
+        _searchFilter = (search != null && !search.isEmpty()) ? search.toLowerCase().trim() : null;
+        applyFilter();
+    }
+
+    private void applyFilter() {
+        if (_searchFilter == null) {
+            _adapter.setEntries(_allEntries);
+        } else {
+            List<PhoneEntry> filtered = new ArrayList<>();
+            String[] tokens = _searchFilter.split("\\s+");
+            for (PhoneEntry entry : _allEntries) {
+                boolean matchesAll = true;
+                String title = entry.getTitle().toLowerCase();
+                String phoneNum = entry.getPhoneNumber().toLowerCase();
+                String notes = entry.getNotes().toLowerCase();
+                for (String token : tokens) {
+                    boolean matchesToken = title.contains(token)
+                            || phoneNum.contains(token)
+                            || notes.contains(token);
+                    if (!matchesToken) {
+                        matchesAll = false;
+                        break;
+                    }
+                }
+                if (matchesAll) {
+                    filtered.add(entry);
+                }
+            }
+            _adapter.setEntries(filtered);
+        }
         updateEmptyState();
     }
 

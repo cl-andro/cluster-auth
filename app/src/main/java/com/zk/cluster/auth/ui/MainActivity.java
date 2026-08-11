@@ -70,12 +70,14 @@ import com.zk.cluster.auth.ui.views.PasswordEntryAdapter;
 import com.zk.cluster.auth.ui.views.PasswordVaultFragment;
 import com.zk.cluster.auth.ui.views.SecretsFragment;
 import com.zk.cluster.auth.ui.views.PhoneNumbersFragment;
+import com.zk.cluster.auth.ui.views.NotesFragment;
 import com.zk.cluster.auth.util.ClipboardUtils;
 import com.zk.cluster.auth.util.TimeUtils;
 import com.zk.cluster.auth.util.UUIDMap;
 import com.zk.cluster.auth.vault.PasswordEntry;
 import com.zk.cluster.auth.vault.SecretEntry;
 import com.zk.cluster.auth.vault.PhoneEntry;
+import com.zk.cluster.auth.vault.NoteEntry;
 import com.zk.cluster.auth.vault.VaultEntry;
 import com.zk.cluster.auth.vault.VaultEntryIcon;
 import com.zk.cluster.auth.vault.VaultFile;
@@ -107,7 +109,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-public class MainActivity extends ClusterActivity implements EntryListView.Listener, PasswordVaultFragment.Listener, SecretsFragment.Listener, PhoneNumbersFragment.Listener {
+public class MainActivity extends ClusterActivity implements EntryListView.Listener, PasswordVaultFragment.Listener, SecretsFragment.Listener, PhoneNumbersFragment.Listener, NotesFragment.Listener {
     // Permission request codes
     private static final int CODE_PERM_CAMERA = 0;
 
@@ -138,6 +140,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
     private PasswordVaultFragment _passwordVaultFragment;
     private SecretsFragment _secretsFragment;
     private PhoneNumbersFragment _phoneNumbersFragment;
+    private NotesFragment _notesFragment;
 
     private Collection<VaultGroup> _groups;
     private ChipGroup _groupChip;
@@ -297,6 +300,16 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         }
         _phoneNumbersFragment.setListener(this);
 
+        _notesFragment = (NotesFragment) getSupportFragmentManager().findFragmentByTag("notes");
+        if (_notesFragment == null) {
+            _notesFragment = new NotesFragment();
+            getSupportFragmentManager().beginTransaction()
+                    .add(R.id.fragment_container, _notesFragment, "notes")
+                    .hide(_notesFragment)
+                    .commit();
+        }
+        _notesFragment.setListener(this);
+
         _scrimOverlay = LayoutInflater.from(this).inflate(R.layout.scrim_layout, null);
         addContentView(_scrimOverlay, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -337,6 +350,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         _tabLayout.addTab(_tabLayout.newTab().setText(R.string.tab_password_vault));
         _tabLayout.addTab(_tabLayout.newTab().setText(R.string.tab_secrets));
         _tabLayout.addTab(_tabLayout.newTab().setText(R.string.tab_phone_no));
+        _tabLayout.addTab(_tabLayout.newTab().setText(R.string.tab_notes));
         _tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabSelected(TabLayout.Tab tab) {
@@ -357,51 +371,51 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
 
         if (position == 0) {
-            ft.show(_entryListView).hide(_passwordVaultFragment).hide(_secretsFragment).hide(_phoneNumbersFragment);
+            ft.show(_entryListView).hide(_passwordVaultFragment).hide(_secretsFragment).hide(_phoneNumbersFragment).hide(_notesFragment);
             findViewById(R.id.group_scroll).setVisibility(
                     _groups != null && !_groups.isEmpty() ? View.VISIBLE : View.GONE
             );
-            if (_searchView != null) {
-                _searchView.setVisibility(View.VISIBLE);
-            }
         } else if (position == 1) {
-            ft.hide(_entryListView).show(_passwordVaultFragment).hide(_secretsFragment).hide(_phoneNumbersFragment);
+            ft.hide(_entryListView).show(_passwordVaultFragment).hide(_secretsFragment).hide(_phoneNumbersFragment).hide(_notesFragment);
             findViewById(R.id.group_scroll).setVisibility(View.GONE);
-            if (_searchView != null) {
-                if (!_searchView.isIconified()) {
-                    collapseSearchView();
-                }
-                _searchView.setVisibility(View.GONE);
-            }
         } else if (position == 2) {
-            ft.hide(_entryListView).hide(_passwordVaultFragment).show(_secretsFragment).hide(_phoneNumbersFragment);
+            ft.hide(_entryListView).hide(_passwordVaultFragment).show(_secretsFragment).hide(_phoneNumbersFragment).hide(_notesFragment);
             findViewById(R.id.group_scroll).setVisibility(View.GONE);
-            if (_searchView != null) {
-                if (!_searchView.isIconified()) {
-                    collapseSearchView();
-                }
-                _searchView.setVisibility(View.GONE);
-            }
+        } else if (position == 3) {
+            ft.hide(_entryListView).hide(_passwordVaultFragment).hide(_secretsFragment).show(_phoneNumbersFragment).hide(_notesFragment);
+            findViewById(R.id.group_scroll).setVisibility(View.GONE);
         } else {
-            ft.hide(_entryListView).hide(_passwordVaultFragment).hide(_secretsFragment).show(_phoneNumbersFragment);
+            ft.hide(_entryListView).hide(_passwordVaultFragment).hide(_secretsFragment).hide(_phoneNumbersFragment).show(_notesFragment);
             findViewById(R.id.group_scroll).setVisibility(View.GONE);
-            if (_searchView != null) {
-                if (!_searchView.isIconified()) {
-                    collapseSearchView();
-                }
-                _searchView.setVisibility(View.GONE);
-            }
+        }
+
+        if (_searchView != null) {
+            _searchView.setVisibility(View.VISIBLE);
         }
 
         setupFabActions();
         ft.commit();
+
         if (position == 1) {
             refreshPasswordEntries();
         } else if (position == 2) {
             refreshSecretEntries();
         } else if (position == 3) {
             refreshPhoneEntries();
+        } else if (position == 4) {
+            refreshNoteEntries();
         }
+
+        // Apply current search query to the selected tab
+        String currentQuery = "";
+        if (_searchView != null && !_searchView.isIconified()) {
+            currentQuery = _searchView.getQuery().toString();
+        } else if (_submittedSearchQuery != null) {
+            currentQuery = _submittedSearchQuery;
+        } else if (_pendingSearchQuery != null) {
+            currentQuery = _pendingSearchQuery;
+        }
+        applySearchQuery(currentQuery);
     }
 
     private void setupFabActions() {
@@ -425,8 +439,10 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             _fab.setOnClickListener(v -> showAddPasswordEntryDialog());
         } else if (_currentTab == 2) {
             _fab.setOnClickListener(v -> showAddSecretEntryDialog());
-        } else {
+        } else if (_currentTab == 3) {
             _fab.setOnClickListener(v -> showAddPhoneEntryDialog());
+        } else {
+            _fab.setOnClickListener(v -> showAddNoteEntryDialog());
         }
     }
 
@@ -1155,6 +1171,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             refreshPasswordEntries();
             refreshSecretEntries();
             refreshPhoneEntries();
+            refreshNoteEntries();
         } else {
             loadEntries();
             checkTimeSyncSetting();
@@ -1202,7 +1219,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             public boolean onQueryTextSubmit(String s) {
                 setTitle(getString(R.string.search));
                 getSupportActionBar().setSubtitle(s);
-                _entryListView.setSearchFilter(s);
+                applySearchQuery(s);
                 _pendingSearchQuery = null;
                 _submittedSearchQuery = s;
                 collapseSearchView();
@@ -1213,12 +1230,12 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             @Override
             public boolean onQueryTextChange(String s) {
                 if (_submittedSearchQuery == null) {
-                    _entryListView.setSearchFilter(s);
+                    applySearchQuery(s);
                 }
 
                 _pendingSearchQuery = Strings.isNullOrEmpty(s) && !_searchView.isIconified() ? null : s;
                 if (_pendingSearchQuery != null) {
-                    _entryListView.setSearchFilter(_pendingSearchQuery);
+                    applySearchQuery(_pendingSearchQuery);
                 }
 
                 return false;
@@ -1237,7 +1254,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         } else if (_submittedSearchQuery != null) {
             setTitle(getString(R.string.search));
             getSupportActionBar().setSubtitle(_submittedSearchQuery);
-            _entryListView.setSearchFilter(_submittedSearchQuery);
+            applySearchQuery(_submittedSearchQuery);
             _searchViewBackPressHandler.setEnabled(true);
         } else if (_prefs.getFocusSearchEnabled() && !_isRecreated) {
             _searchView.setIconified(false);
@@ -1310,6 +1327,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             refreshPasswordEntries();
             refreshSecretEntries();
             refreshPhoneEntries();
+            refreshNoteEntries();
         }
     }
 
@@ -1547,6 +1565,7 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         _passwordVaultFragment.clearEntries();
         _secretsFragment.clearEntries();
         _phoneNumbersFragment.clearEntries();
+        _notesFragment.clearEntries();
         _loaded = false;
 
         if (userInitiated) {
@@ -1674,6 +1693,9 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
                 .setPositiveButton(android.R.string.ok, null)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
 
         dialog.setOnShowListener(d -> {
             Button btnOk = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
@@ -1853,6 +1875,9 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
                 .setPositiveButton(android.R.string.ok, null)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
 
         dialog.setOnShowListener(d -> {
             Button btnOk = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
@@ -2015,6 +2040,9 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
                 .setPositiveButton(android.R.string.ok, null)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
 
         dialog.setOnShowListener(d -> {
             Button btnOk = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
@@ -2402,6 +2430,138 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         } catch (Exception e) {
             e.printStackTrace();
             Toast.makeText(this, "Failed to launch installer: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void refreshNoteEntries() {
+        if (_vaultManager.isVaultLoaded()) {
+            _notesFragment.setEntries(_vaultManager.getVault().getNoteEntries().getValues());
+        }
+    }
+
+    private void showAddNoteEntryDialog() {
+        showNoteEntryDialog(null);
+    }
+
+    private void showNoteEntryDialog(@Nullable final NoteEntry existing) {
+        View view = LayoutInflater.from(this).inflate(R.layout.dialog_note_entry, null);
+        final TextInputLayout layoutTitle = view.findViewById(R.id.layout_title);
+        final TextInputEditText inputTitle = view.findViewById(R.id.input_title);
+        final TextInputEditText inputNotes = view.findViewById(R.id.input_notes);
+
+        if (existing != null) {
+            inputTitle.setText(existing.getTitle());
+            inputNotes.setText(existing.getNotes());
+        }
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle(existing != null ? R.string.notes_vault_edit_entry : R.string.notes_vault_add_entry)
+                .setView(view)
+                .setPositiveButton(android.R.string.ok, null)
+                .setNegativeButton(android.R.string.cancel, null)
+                .create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
+
+        dialog.setOnShowListener(d -> {
+            Button btnOk = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            btnOk.setOnClickListener(v -> {
+                String title = inputTitle.getText().toString().trim();
+                if (title.isEmpty()) {
+                    layoutTitle.setError(getString(R.string.error_required_field));
+                    return;
+                }
+
+                if (existing != null) {
+                    existing.setTitle(title);
+                    existing.setNotes(inputNotes.getText().toString());
+                    _vaultManager.getVault().getNoteEntries().replace(existing);
+                } else {
+                    NoteEntry newEntry = new NoteEntry();
+                    newEntry.setTitle(title);
+                    newEntry.setNotes(inputNotes.getText().toString());
+                    _vaultManager.getVault().getNoteEntries().add(newEntry);
+                }
+
+                dialog.dismiss();
+                saveAndBackupVault();
+                refreshNoteEntries();
+            });
+        });
+
+        Dialogs.showSecureDialog(dialog);
+    }
+
+    private void deleteNoteEntry(final NoteEntry entry) {
+        Dialogs.showSecureDialog(new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.notes_vault_delete_entry)
+                .setMessage(R.string.notes_vault_delete_confirm)
+                .setPositiveButton(android.R.string.yes, (d, w) -> {
+                    _vaultManager.getVault().getNoteEntries().remove(entry);
+                    saveAndBackupVault();
+                    refreshNoteEntries();
+                })
+                .setNegativeButton(android.R.string.no, null)
+                .create());
+    }
+
+    @Override
+    public void onNoteEntryClick(NoteEntry entry) {
+        showNoteEntryOptions(entry);
+    }
+
+    @Override
+    public void onNoteEntryLongClick(final NoteEntry entry) {
+        showNoteEntryOptions(entry);
+    }
+
+    private void showNoteEntryOptions(final NoteEntry entry) {
+        List<String> options = new ArrayList<>();
+        options.add(getString(R.string.notes_vault_copy_content));
+        options.add(getString(entry.isFavorite() ? R.string.unfavorite : R.string.favorite));
+        options.add(getString(R.string.edit));
+        options.add(getString(R.string.action_delete));
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle(entry.getTitle())
+                .setItems(options.toArray(new String[0]), (d, which) -> {
+                    switch (which) {
+                        case 0:
+                            copyToClipboard(entry.getNotes());
+                            Toast.makeText(this, R.string.notes_vault_copied_content, Toast.LENGTH_SHORT).show();
+                            break;
+                        case 1:
+                            entry.setIsFavorite(!entry.isFavorite());
+                            _vaultManager.getVault().getNoteEntries().replace(entry);
+                            saveAndBackupVault();
+                            refreshNoteEntries();
+                            break;
+                        case 2:
+                            showNoteEntryDialog(entry);
+                            break;
+                        case 3:
+                            deleteNoteEntry(entry);
+                            break;
+                    }
+                })
+                .create();
+        Dialogs.showSecureDialog(dialog);
+    }
+
+    private void applySearchQuery(String query) {
+        if (_currentTab == 0) {
+            _entryListView.setSearchFilter(query);
+        } else if (_currentTab == 1) {
+            _passwordVaultFragment.setSearchFilter(query);
+        } else if (_currentTab == 2) {
+            _secretsFragment.setSearchFilter(query);
+        } else if (_currentTab == 3) {
+            _phoneNumbersFragment.setSearchFilter(query);
+        } else if (_currentTab == 4) {
+            if (_notesFragment != null) {
+                _notesFragment.setSearchFilter(query);
+            }
         }
     }
 }

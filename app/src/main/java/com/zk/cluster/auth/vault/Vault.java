@@ -12,12 +12,13 @@ import java.util.Optional;
 import java.util.UUID;
 
 public class Vault {
-    private static final int VERSION = 4;
+    private static final int VERSION = 5;
     private final UUIDMap<VaultEntry> _entries = new UUIDMap<>();
     private final UUIDMap<VaultGroup> _groups = new UUIDMap<>();
     private final UUIDMap<PasswordEntry> _passwordEntries = new UUIDMap<>();
     private final UUIDMap<SecretEntry> _secretEntries = new UUIDMap<>();
     private final UUIDMap<PhoneEntry> _phoneEntries = new UUIDMap<>();
+    private final UUIDMap<NoteEntry> _noteEntries = new UUIDMap<>();
     private boolean _iconsOptimized = true;
 
     // Whether we've migrated the group list to the new format while parsing the vault
@@ -57,6 +58,11 @@ public class Vault {
                 phoneEntriesArray.put(pe.toJson());
             }
 
+            JSONArray noteEntriesArray = new JSONArray();
+            for (NoteEntry ne : _noteEntries) {
+                noteEntriesArray.put(ne.toJson());
+            }
+
             JSONObject obj = new JSONObject();
             obj.put("version", VERSION);
             obj.put("entries", entriesArray);
@@ -64,6 +70,7 @@ public class Vault {
             obj.put("passwordEntries", passwordEntriesArray);
             obj.put("secretEntries", secretEntriesArray);
             obj.put("phoneEntries", phoneEntriesArray);
+            obj.put("noteEntries", noteEntriesArray);
             obj.put("icons_optimized", _iconsOptimized);
 
             return obj;
@@ -134,6 +141,14 @@ public class Vault {
                 }
             }
 
+            if (obj.has("noteEntries")) {
+                JSONArray noteArray = obj.getJSONArray("noteEntries");
+                for (int i = 0; i < noteArray.length(); i++) {
+                    NoteEntry ne = NoteEntry.fromJson(noteArray.getJSONObject(i));
+                    vault.getNoteEntries().add(ne);
+                }
+            }
+
             if (!obj.optBoolean("icons_optimized")) {
                 vault.setIconsOptimized(false);
             }
@@ -200,6 +215,10 @@ public class Vault {
 
     public UUIDMap<PhoneEntry> getPhoneEntries() {
         return _phoneEntries;
+    }
+
+    public UUIDMap<NoteEntry> getNoteEntries() {
+        return _noteEntries;
     }
 
     public interface EntryFilter {

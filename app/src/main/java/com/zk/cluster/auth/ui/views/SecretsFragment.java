@@ -59,13 +59,63 @@ public class SecretsFragment extends Fragment implements SecretEntryAdapter.List
         return view;
     }
 
+    private List<SecretEntry> _allEntries = new ArrayList<>();
+    private String _searchFilter = null;
+
     public void setEntries(Collection<SecretEntry> entries) {
-        _adapter.setEntries(new ArrayList<>(entries));
-        updateEmptyState();
+        _allEntries = new ArrayList<>(entries);
+        applyFilter();
     }
 
     public void clearEntries() {
-        _adapter.setEntries(new ArrayList<>());
+        _allEntries = new ArrayList<>();
+        applyFilter();
+    }
+
+    public void setSearchFilter(String search) {
+        _searchFilter = (search != null && !search.isEmpty()) ? search.toLowerCase().trim() : null;
+        applyFilter();
+    }
+
+    private void applyFilter() {
+        if (_searchFilter == null) {
+            _adapter.setEntries(_allEntries);
+        } else {
+            List<SecretEntry> filtered = new ArrayList<>();
+            String[] tokens = _searchFilter.split("\\s+");
+            for (SecretEntry entry : _allEntries) {
+                boolean matchesAll = true;
+                String title = entry.getTitle().toLowerCase();
+                String tokenVal = entry.getToken().toLowerCase();
+                String username = entry.getUsername().toLowerCase();
+                String url = entry.getUrl().toLowerCase();
+                String notes = entry.getNotes().toLowerCase();
+                for (String token : tokens) {
+                    boolean matchesToken = title.contains(token)
+                            || tokenVal.contains(token)
+                            || username.contains(token)
+                            || url.contains(token)
+                            || notes.contains(token);
+                    if (!matchesToken) {
+                        for (SecretEntry.CustomField cf : entry.getCustomFields()) {
+                            if (cf.getLabel().toLowerCase().contains(token)
+                                    || cf.getValue().toLowerCase().contains(token)) {
+                                matchesToken = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!matchesToken) {
+                        matchesAll = false;
+                        break;
+                    }
+                }
+                if (matchesAll) {
+                    filtered.add(entry);
+                }
+            }
+            _adapter.setEntries(filtered);
+        }
         updateEmptyState();
     }
 

@@ -16,25 +16,27 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.zk.cluster.auth.R;
-import com.zk.cluster.auth.vault.PasswordEntry;
+import com.zk.cluster.auth.vault.NoteEntry;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-public class PasswordVaultFragment extends Fragment implements PasswordEntryAdapter.Listener {
-    private PasswordEntryAdapter _adapter;
+public class NotesFragment extends Fragment implements NoteEntryAdapter.Listener {
+    private NoteEntryAdapter _adapter;
     private RecyclerView _recyclerView;
     private LinearLayout _emptyStateView;
     private Listener _listener;
+    private List<NoteEntry> _allEntries = new ArrayList<>();
+    private String _searchFilter = null;
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.fragment_password_vault, container, false);
+        View view = inflater.inflate(R.layout.fragment_notes, container, false);
 
-        _adapter = new PasswordEntryAdapter(this);
+        _adapter = new NoteEntryAdapter(this);
 
-        _recyclerView = view.findViewById(R.id.rvPasswordEntries);
+        _recyclerView = view.findViewById(R.id.rvNoteEntries);
         _recyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         _recyclerView.setAdapter(_adapter);
 
@@ -59,10 +61,7 @@ public class PasswordVaultFragment extends Fragment implements PasswordEntryAdap
         return view;
     }
 
-    private List<PasswordEntry> _allEntries = new ArrayList<>();
-    private String _searchFilter = null;
-
-    public void setEntries(Collection<PasswordEntry> entries) {
+    public void setEntries(Collection<NoteEntry> entries) {
         _allEntries = new ArrayList<>(entries);
         applyFilter();
     }
@@ -81,28 +80,15 @@ public class PasswordVaultFragment extends Fragment implements PasswordEntryAdap
         if (_searchFilter == null) {
             _adapter.setEntries(_allEntries);
         } else {
-            List<PasswordEntry> filtered = new ArrayList<>();
+            List<NoteEntry> filtered = new ArrayList<>();
             String[] tokens = _searchFilter.split("\\s+");
-            for (PasswordEntry entry : _allEntries) {
+            for (NoteEntry entry : _allEntries) {
                 boolean matchesAll = true;
                 String title = entry.getTitle().toLowerCase();
-                String username = entry.getUsername().toLowerCase();
-                String url = entry.getUrl().toLowerCase();
                 String notes = entry.getNotes().toLowerCase();
                 for (String token : tokens) {
                     boolean matchesToken = title.contains(token)
-                            || username.contains(token)
-                            || url.contains(token)
                             || notes.contains(token);
-                    if (!matchesToken) {
-                        for (PasswordEntry.CustomField cf : entry.getCustomFields()) {
-                            if (cf.getLabel().toLowerCase().contains(token)
-                                    || cf.getValue().toLowerCase().contains(token)) {
-                                matchesToken = true;
-                                break;
-                            }
-                        }
-                    }
                     if (!matchesToken) {
                         matchesAll = false;
                         break;
@@ -132,17 +118,17 @@ public class PasswordVaultFragment extends Fragment implements PasswordEntryAdap
     }
 
     @Override
-    public void onEntryClick(PasswordEntry entry) {
-        if (_listener != null) _listener.onPasswordEntryClick(entry);
+    public void onEntryClick(NoteEntry entry) {
+        if (_listener != null) _listener.onNoteEntryClick(entry);
     }
 
     @Override
-    public void onEntryLongClick(PasswordEntry entry) {
-        if (_listener != null) _listener.onPasswordEntryLongClick(entry);
+    public void onEntryLongClick(NoteEntry entry) {
+        if (_listener != null) _listener.onNoteEntryLongClick(entry);
     }
 
     public interface Listener {
-        void onPasswordEntryClick(PasswordEntry entry);
-        void onPasswordEntryLongClick(PasswordEntry entry);
+        void onNoteEntryClick(NoteEntry entry);
+        void onNoteEntryLongClick(NoteEntry entry);
     }
 }

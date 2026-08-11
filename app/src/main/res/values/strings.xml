@@ -628,6 +628,7 @@
     <string name="tab_password_vault">Passwords</string>
     <string name="tab_secrets">Secrets</string>
     <string name="tab_phone_no">Phone No.</string>
+    <string name="tab_notes">Notes</string>
 
     <string name="pw_vault_title_hint">Title</string>
     <string name="pw_vault_username_hint">Username</string>
@@ -684,4 +685,11 @@
     <string name="phone_vault_delete_confirm">Are you sure you want to delete this phone number entry?</string>
     <string name="phone_vault_copy_number">Copy phone number</string>
     <string name="phone_vault_copied_number">Phone number copied</string>
+
+    <string name="notes_vault_add_entry">Add note</string>
+    <string name="notes_vault_edit_entry">Edit note</string>
+    <string name="notes_vault_delete_entry">Delete note</string>
+    <string name="notes_vault_delete_confirm">Are you sure you want to delete this note entry?</string>
+    <string name="notes_vault_copy_content">Copy note content</string>
+    <string name="notes_vault_copied_content">Note content copied</string>
 </resources>

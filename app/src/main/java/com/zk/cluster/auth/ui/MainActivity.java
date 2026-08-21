@@ -94,6 +94,13 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.common.base.Strings;
 
+import android.provider.OpenableColumns;
+import android.net.Uri;
+import android.database.Cursor;
+import java.io.InputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -220,6 +227,16 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             registerForActivityResult(new StartActivityForResult(), activityResult -> {
                 if (activityResult.getResultCode() == RESULT_OK && activityResult.getData() != null) {
                     onScanImageResult(activityResult.getData());
+                }
+            });
+
+    private TextInputEditText _activeSecretTitleInput;
+    private TextInputEditText _activeSecretTokenInput;
+
+    private final ActivityResultLauncher<Intent> filePickResultLauncher =
+            registerForActivityResult(new StartActivityForResult(), activityResult -> {
+                if (activityResult.getResultCode() == RESULT_OK && activityResult.getData() != null) {
+                    onFilePicked(activityResult.getData().getData());
                 }
             });
 
@@ -1853,6 +1870,19 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
         LinearLayout layoutCustomFields = view.findViewById(R.id.layout_custom_fields);
         Button btnAddField = view.findViewById(R.id.btn_add_custom_field);
 
+        _activeSecretTitleInput = inputTitle;
+        _activeSecretTokenInput = inputToken;
+
+        Button btnImportFile = view.findViewById(R.id.btn_import_file);
+        btnImportFile.setOnClickListener(v -> {
+            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.setType("*/*");
+            String[] mimeTypes = {"text/plain", "application/json", "text/markdown", "text/x-markdown"};
+            intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            filePickResultLauncher.launch(intent);
+        });
+
         List<SecretEntry.CustomField> customFields = new ArrayList<>();
 
         if (existing != null) {
@@ -1911,6 +1941,11 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
                 saveAndBackupVault();
                 refreshSecretEntries();
             });
+        });
+
+        dialog.setOnDismissListener(d -> {
+            _activeSecretTitleInput = null;
+            _activeSecretTokenInput = null;
         });
 
         Dialogs.showSecureDialog(dialog);
@@ -2562,6 +2597,59 @@ public class MainActivity extends ClusterActivity implements EntryListView.Liste
             if (_notesFragment != null) {
                 _notesFragment.setSearchFilter(query);
             }
+        }
+    }
+
+    private void onFilePicked(Uri uri) {
+        if (uri == null) return;
+        try {
+            String fileName = "";
+            Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+            if (cursor != null) {
+                if (cursor.moveToFirst()) {
+                    int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                    if (nameIndex != -1) {
+                        fileName = cursor.getString(nameIndex);
+                    }
+                }
+                cursor.close();
+            }
+            if (fileName == null || fileName.isEmpty()) {
+                fileName = uri.getLastPathSegment();
+            }
+
+            if (fileName != null && fileName.contains(".")) {
+                int lastDot = fileName.lastIndexOf('.');
+                if (lastDot > 0) {
+                    fileName = fileName.substring(0, lastDot);
+                }
+            }
+
+            InputStream inputStream = getContentResolver().openInputStream(uri);
+            if (inputStream != null) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+                StringBuilder stringBuilder = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    stringBuilder.append(line).append("\n");
+                }
+                if (stringBuilder.length() > 0) {
+                    stringBuilder.setLength(stringBuilder.length() - 1);
+                }
+                inputStream.close();
+
+                String fileContent = stringBuilder.toString();
+
+                if (_activeSecretTitleInput != null) {
+                    _activeSecretTitleInput.setText(fileName);
+                }
+                if (_activeSecretTokenInput != null) {
+                    _activeSecretTokenInput.setText(fileContent);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Failed to read file: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 }
